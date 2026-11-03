@@ -34,6 +34,14 @@ course-materials/    Notes, scripts, examples, research
 
 ## Agent Workflow
 
+### Documentation lookup (libraries, APIs, CLIs)
+Do not rely on training data for library or API details. Look them up in this order:
+1. **CLI tools:** run `<tool> --help` (and `<tool> <subcommand> --help`) on this machine first; the installed version is the source of truth.
+2. **Context7 MCP:** `resolve-library-id`, then `query-docs` for the pinned version.
+3. **Web search:** only when Context7 has no or outdated results; prefer official documentation, changelogs and PyPI pages.
+
+Name the source and version you relied on in ADRs and task summaries.
+
 ### When implementing new or refactoring functionality
 1. Read the relevant PRD and ADR files for the affected area.
 2. Define the expected behavior from the specification before writing or changing any code.
