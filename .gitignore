@@ -19,3 +19,6 @@ __pycache__/
 **/target/
 *.class
 /.idea
+
+# Generated map QA run outputs (reports, thumbnails, cost logs)
+/reports/
