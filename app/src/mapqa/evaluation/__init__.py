@@ -12,7 +12,7 @@ from mapqa.contract.models import CascadeResult
 from mapqa.evaluation.baseline import OsmDiscrepancies, load_signs, mapillary_baseline, osm_discrepancies
 from mapqa.evaluation.calibrate import calibrate
 from mapqa.evaluation.labels import load_sign_labels
-from mapqa.evaluation.metrics import EvaluationReport, evaluate
+from mapqa.evaluation.metrics import EvaluationReport, Metric, evaluate
 from mapqa.evaluation.split import split_by_sequence
 
 
@@ -36,6 +36,7 @@ def photo_split(labels_path: Path) -> dict[str, str]:
 class EvaluationOutput:
     report: EvaluationReport | None
     discrepancies: OsmDiscrepancies | None
+    baseline_mapillary: Metric | None = None
 
 
 def run_evaluation(
@@ -54,7 +55,7 @@ def run_evaluation(
     baseline = mapillary_baseline(labels, signs, split, split_name)
     discrepancies = osm_discrepancies(labels, nearest_csv)
     report = evaluate(results, labels, split, split_name, baseline) if with_model else None
-    return EvaluationOutput(report, discrepancies)
+    return EvaluationOutput(report, discrepancies, baseline)
 
 
 def calibration_pairs(labels_path: Path, results: dict[str, CascadeResult], level: int) -> list[tuple[float, bool]]:

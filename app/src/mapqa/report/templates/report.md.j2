@@ -23,6 +23,7 @@
 - Odczyt modelem: {{ "tak" if vm.model_reading else "nie" }}{% if vm.confirmation %} (potwierdzenie: `{{ vm.confirmation }}`){% endif %}
 
 {% if not vm.model_reading %}
+
 Odczyt modelem nie był uruchomiony.
 {% else %}
 {% if vm.cost_manifest %}
@@ -166,6 +167,14 @@ Metryki z jawnymi mianownikami (etykiety `certain`; wykluczone `uncertain`: {{ v
 {% elif not vm.model_reading %}
 
 Odczyt modelem nie był uruchomiony.
+{% if vm.baseline_mapillary %}
+
+Punkt odniesienia — detektor Mapillary na etykietach `certain` (bez odczytu modelem):
+
+| Metryka | Licznik | Mianownik | Wartość |
+|---|---|---|---|
+| baseline_mapillary | {{ vm.baseline_mapillary.numerator }} | {{ vm.baseline_mapillary.denominator }} | {{ vm.baseline_mapillary.value|pl }} |
+{% endif %}
 {% else %}
 
 Brak ewaluacji (brak etykiet referencyjnych).

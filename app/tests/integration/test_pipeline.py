@@ -65,7 +65,8 @@ def test_e2e01_no_model_run_writes_report_and_queue(cfg: Path, capsys, monkeypat
     assert res["model_reading"] is False
     assert res["funnel"]["skipped_no_model"] == 119
     report = (out / "report.md").read_text(encoding="utf-8")
-    assert "Odczyt modelem nie był uruchomiony" in report
+    assert "\n\nOdczyt modelem nie był uruchomiony" in report  # own paragraph, not glued to the list
+    assert "baseline_mapillary" in report  # detector baseline is shown also without the model (PRD §9)
     with open(out / "manual_queue.csv", encoding="utf-8-sig", newline="") as f:
         assert list(csv.reader(f))[1:] == []  # QUE-01: skipped_no_model creates no queue items
     run = json.loads((out / "run.json").read_text(encoding="utf-8"))

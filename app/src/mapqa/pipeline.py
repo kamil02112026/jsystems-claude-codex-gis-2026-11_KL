@@ -352,6 +352,7 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
         thumbs=thumbs,
         osm_discrepancies=evaluation.discrepancies,
         evaluation=evaluation.report,
+        baseline_mapillary=evaluation.baseline_mapillary,
         cost=cost,
         attributions=[Attribution(pid, signs[pid].author, signs[pid].license, signs[pid].source_url) for pid in queue_photos],
     )

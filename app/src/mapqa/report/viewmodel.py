@@ -8,7 +8,7 @@ from typing import Any
 
 from mapqa.contract.models import Confirmation, RejectedRecord, RunLimits, SourceDescriptor
 from mapqa.evaluation.baseline import OsmDiscrepancies
-from mapqa.evaluation.metrics import EvaluationReport
+from mapqa.evaluation.metrics import EvaluationReport, Metric
 
 SAMPLE_BIAS_NOTE = (
     "Obciążenie próbki: dostarczone zdjęcia Mapillary dobrano przez znaki, a 95% dróg połączonych ze zdjęciami "
@@ -114,8 +114,9 @@ class ReportViewModel:
     # 6. sign vs OSM discrepancies
     osm_discrepancies: OsmDiscrepancies | None = None
     discrepancy_distribution: dict[str, int] = field(default_factory=dict)  # label -> count
-    # 7. evaluation
+    # 7. evaluation (baseline_mapillary is shown also without model reading)
     evaluation: EvaluationReport | None = None
+    baseline_mapillary: Metric | None = None
     # 8. cost
     cost: CostSummary = field(default_factory=CostSummary)
     # 9. attribution of shown photos
