@@ -64,7 +64,7 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
 2. System wczytuje dane i wypisuje **profil wejścia**.
 3. System łączy zdjęcia z drogami i oznacza niepewne połączenia.
 4. System porównuje atrybuty OSM i Overture i wyznacza kandydatów rozbieżności.
-5. System zadaje neutralne pytania o zdjęcia modelowi decyzyjnemu. Gdy ten nie jest pewny, pytanie trafia do zwykłego LLM. Gdy i ten nie zna odpowiedzi, przypadek trafia do kolejki ręcznej (z cache i limitami).
+5. Jeśli analityk włączył odczyt modelem (`--model`), system pokazuje manifest kosztu i czeka na potwierdzenie (albo `--yes`). Potem zadaje neutralne pytania o zdjęcia modelowi decyzyjnemu. Gdy ten nie jest pewny, pytanie trafia do zwykłego LLM. Gdy i ten nie zna odpowiedzi, przypadek trafia do kolejki ręcznej (z cache i limitami).
 6. System zestawia odczyt ze zdjęcia z mapą, buduje kolejkę ręcznej weryfikacji i generuje raport MD + HTML.
 7. Analityk przegląda kolejkę i raport i sam decyduje o poprawkach.
 
@@ -75,7 +75,11 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
 - F1.1 `bbox` w WGS84 (`minx,miny,maxx,maxy`); domyślnie bbox danych `19.80,49.95,20.15,50.15`. Niepoprawny bbox (odwrócone granice, poza zakresem współrzędnych) kończy uruchomienie czytelnym błędem przed wczytaniem danych.
 - F1.2 Lista atrybutów z podzbioru `speed_limit`, `surface`, `lit`; domyślnie wszystkie trzy.
 - F1.3 Źródło danych wybierane konfiguracją (F8): `files` (domyślne), `databricks` lub inne zdefiniowane w pliku konfiguracyjnym. Brak dostępu do wybranego źródła daje czytelny komunikat z sugestią alternatywy; narzędzie nie przełącza źródła po cichu.
-- F1.4 Tryb `--no-model` uruchamia kroki 2–4 i raport bez wywołań modelu (do pracy offline i testów).
+- F1.4 **Płatne wywołania modeli są domyślnie wyłączone** (przyjęte za wersją referencyjną prowadzącego). Domyślny run (tryb bez modelu) wykonuje kroki 2–4 i raport bez wywołań modelu (praca offline, testy, uruchomienia przez agenta). Odczyt modelem włącza flaga `--model` (albo `model_reading = true` w pliku konfiguracyjnym); `--no-model` wymusza tryb bez modelu mimo konfiguracji.
+  - Gdy odczyt modelem jest włączony i choć jedno pytanie nie ma odpowiedzi w cache, CLI **przed pierwszym płatnym wywołaniem** wypisuje manifest: liczbę obrazów i pytań w próbce, modele każdego poziomu, maksymalną liczbę zapytań i maksymalny koszt w USD; potem pyta `Kontynuować? [y/N]`. Pełne pokrycie z cache nie wymaga potwierdzenia.
+  - `--yes` potwierdza bez pytania (dla agenta AI i skryptów) i nie zmienia limitów.
+  - Odpowiedź inna niż `y` → run kończy się raportem bez odczytu modelem (`skipped_no_model`) i ostrzeżeniem, kod `0`.
+  - Brak terminala interaktywnego (stdin nie jest TTY) i brak `--yes` → run przerwany przed wywołaniem modelu i przed zapisem raportu, czytelny komunikat „Odczyt modelem wymaga potwierdzenia: dodaj `--yes` albo uruchom bez `--model`”, kod `1` (`confirmation_required`).
 - F1.5 Sekrety (`OPENROUTER_API_KEY`, token Databricks) wyłącznie ze zmiennych środowiskowych; nigdy w logu, raporcie ani cache.
 
 ### F2. Wczytanie i profil danych
@@ -193,6 +197,7 @@ Cel: analityk **albo agent AI korzystający z narzędzia** może wskazać, skąd
   - `mapqa sources list` — nazwy, typy i metody dostępu skonfigurowanych źródeł;
   - `mapqa sources check [--source X]` — test połączenia i liczności tabel w bbox;
   - `--output json` dla wszystkich poleceń — wynik maszynowy dla agenta;
+  - `--model --yes` — jawne włączenie płatnego odczytu i potwierdzenie bez interakcji (F1.4); bez `--model` agent nigdy nie wywołuje płatnego API;
   - stałe kody wyjścia: `0` sukces, `1` błąd danych lub walidacji, `2` źródło niedostępne lub brak uprawnień, `3` przekroczony budżet modelu.
 - F8.10 Wynik `--no-model` z tych samych danych jest identyczny dla źródeł `files` i `databricks` (te same kandydaci rozbieżności i liczności), z wyjątkiem pól metadanych źródła.
 
@@ -278,6 +283,7 @@ Z kilkunastu pełnych kadrów z prędkością nie wyciągamy wniosków o kalibra
 17. **Zgodność Databricks:** `mapqa sources check --source course-databricks` zwraca liczności 99 768 / 85 405 / 561 / 561 / 1730 zgodne z plikami. Uruchomienie `--no-model` na obu źródłach daje tych samych kandydatów rozbieżności.
 18. **Błędy Databricks:** brak tokenu lub HTTP 401/403 → kod `2` i komunikat bez wartości tokenu; stan `FAILED` → błąd, nie pusty wynik.
 19. **Agent:** `mapqa sources list --output json` i `mapqa run ... --output json` zwracają poprawny JSON z wynikiem lub błędem, który agent może przetworzyć bez czytania tekstu dla człowieka.
+20. **Płatne wywołania:** `mapqa run` bez `--model` wykonuje 0 zapytań do OpenRouter i nie wymaga `OPENROUTER_API_KEY`. `mapqa run --model` wypisuje manifest (obrazy, pytania, modele, maks. zapytań, maks. USD) przed pierwszym zapytaniem; bez TTY i bez `--yes` kończy się kodem `1` (`confirmation_required`) i 0 zapytań; odpowiedź `N` daje raport bez odczytu i kod `0`; `--yes` uruchamia odczyt bez pytania.
 
 ## 9. Etapy wdrożenia: MVP i kolejne przyrosty
 
@@ -308,7 +314,7 @@ Sekcje 3–8 opisują docelowe v1. Pierwszy etap (**MVP**) ma jak najszybciej ur
 | Porównanie odczytu z OSM `maxspeed` (surowe tagi kierunkowe i warunkowe zachowane), kandydaci i priorytety | F4.2 (część OSM), F6.1–F6.7 |
 | Raport **Markdown** + `manual_queue.csv` + `evaluation.json` | F7.1–F7.3 (bez HTML), F7.5, F7.6 |
 | Ewaluacja kaskady na etykietach `certain`, podział po `sequence`, porównanie z detektorem Mapillary | Sekcja 7 (prędkość) |
-| Testy z zamockowanym API; jedno prawdziwe uruchomienie na OpenRouter | Kryteria 6–9, 12–15, 19 |
+| Testy z zamockowanym API; jedno prawdziwe uruchomienie na OpenRouter (`--model`, po potwierdzeniu manifestu) | Kryteria 6–9, 12–15, 19, 20 |
 
 ### Poza MVP — kolejność przyrostów
 
@@ -321,7 +327,7 @@ Sekcje 3–8 opisują docelowe v1. Pierwszy etap (**MVP**) ma jak najszybciej ur
 
 ### Kryteria akceptacji MVP
 
-- Kryteria 5–9, 12–15 i 19 z sekcji 8 oraz 10–11 w zakresie prędkości (raport Markdown zamiast HTML). Kryteria 1–4 i 16–18 przechodzą do przyrostu 1.
+- Kryteria 5–9, 12–15, 19 i 20 z sekcji 8 oraz 10–11 w zakresie prędkości (raport Markdown zamiast HTML). Kryteria 1–4 i 16–18 przechodzą do przyrostu 1.
 - Uruchomienie MVP na 119 wycinkach mieści się w budżecie 1 USD i 200 zapytań (poziom 2 tylko dla eskalowanych pytań; drugie uruchomienie z cache = 0 zapytań).
 - Raport pokazuje, ile z 46 rozbieżności znak ↔ OSM model potwierdził odczytem, ile poszło do człowieka i dlaczego.
 - Trafność i odsetek przekazania człowiekowi są podane osobno dla znaków liczbowych i negatywów `none`, obok wyniku detektora Mapillary na tych samych zdjęciach.

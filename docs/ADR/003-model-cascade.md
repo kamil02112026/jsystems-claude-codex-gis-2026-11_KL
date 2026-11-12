@@ -112,7 +112,7 @@ Odpowiedzi `nie widać`, `nieczytelny`, `brak znaku` z pewnością ≥ progu są
    - `model_unavailable`, gdy oba poziomy `model_unavailable`;
    - `budget_exceeded`, gdy poziom 2 dostał odmowę budżetu;
    - `abstain` w pozostałych przypadkach.
-5. Tryb `--no-model`: kaskada nie jest uruchamiana, `final_status = skipped_no_model`; klient HTTP nie jest tworzony, klucz API nie jest wymagany.
+5. Tryb bez modelu (domyślny, `--no-model`, albo odmowa `N` w potwierdzeniu manifestu — ADR-000 §6, D11): kaskada nie jest uruchamiana, `final_status = skipped_no_model`; klient HTTP nie jest tworzony, klucz API nie jest wymagany. Klient HTTP powstaje dopiero po potwierdzeniu (`y` albo `--yes`) albo gdy wszystkie pytania są w cache (wtedy bez żądań).
 6. Wyjątek w jednym pytaniu (np. uszkodzony obraz) = `invalid_response` z `error_class`; run kontynuuje (F5.7).
 7. Obraz odrzucony przy przygotowaniu (§3.2) → `final_status = image_out_of_bounds`, `resolved_by = human`, żaden poziom nie jest wywoływany.
 
@@ -395,8 +395,9 @@ Testy integracyjne klientów używają wyłącznie nagrań z D-003-6 (respx). Te
 | CAC-03 błędy poza cache | Unit | `model_unavailable` | brak wpisu w cache | — |
 | LOG-01 log kosztów | Unit | run z 3 pytaniami | 1 wiersz na próbę, wszystkie pola F5.10, brak klucza API i base64 | cache hit ma koszt 0 |
 | SEC-01 sekret | Integration | `OPENROUTER_API_KEY=TEST_SECRET_...` | sekret tylko w nagłówku żądania; brak w logach, cache, nagraniach, wyjątkach | wyjątek httpx z requestem w repr |
-| NOM-01 `--no-model` | Unit | brak klucza API | brak klienta HTTP, `skipped_no_model` | — |
-| PAID-01 prawdziwy run | E2E `paid` | 119 wycinków, limity domyślne | raport powstaje, koszt ≤ 1 USD, ≤ 200 zapytań; drugi run 0 zapytań | — |
+| NOM-01 tryb bez modelu | Unit | brak klucza API, brak `--model` | brak klienta HTTP, `skipped_no_model` | `--no-model` przy `model_reading = true` w konfiguracji |
+| CNF-01 potwierdzenie | Unit | `--model`, pytania bez cache, stdin bez TTY, brak `--yes` | `confirmation_required`, kod 1, 0 żądań | wszystkie pytania w cache → brak potwierdzenia, 0 żądań |
+| PAID-01 prawdziwy run | E2E `paid` | `--model --yes`, 119 wycinków, limity domyślne | raport powstaje, koszt ≤ 1 USD, ≤ 200 zapytań; drugi run 0 zapytań | — |
 
 ### Techniczne kryteria akceptacji
 

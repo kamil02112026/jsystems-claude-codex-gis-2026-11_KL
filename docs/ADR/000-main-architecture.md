@@ -126,7 +126,7 @@ Kierunek zależności: **cli → pipeline → (rdzeń) → porty ← adaptery**.
 
 | Moduł | Odpowiedzialność | Zależy od | Używany przez |
 |---|---|---|---|
-| `cli` | Parsowanie poleceń, wybór formatu wyjścia, mapowanie wyjątków domenowych na kody wyjścia | `config`, `pipeline`, `sources.registry`, `evaluation` | użytkownik, agent AI |
+| `cli` | Parsowanie poleceń, wybór formatu wyjścia, potwierdzenie płatnych wywołań (manifest, `y/N`, `--yes`, wykrycie TTY), mapowanie wyjątków domenowych na kody wyjścia | `config`, `pipeline`, `sources.registry`, `evaluation` | użytkownik, agent AI |
 | `config` | Precedencja źródła i ustawień, walidacja, rozwiązywanie nazw zmiennych sekretów | stdlib, Pydantic | `cli`, `pipeline` |
 | `contract` | Definicja `DataBundle` i schematów zbiorów, walidacja typów/CRS/NULL heading | pandas, GeoPandas | `sources`, `profile`, wszystkie kroki rdzenia |
 | `sources` | Port `SourceAdapter` + adaptery `files`, `databricks` | `contract`, httpx, subprocess | `pipeline`, `cli sources` |
@@ -142,7 +142,7 @@ Kierunek zależności: **cli → pipeline → (rdzeń) → porty ← adaptery**.
 | `candidates` | Reguły F6.1, priorytet F6.3, powód po polsku, kolejka F6.5–F6.7 | `compare`, `normalize`, wynik kaskady, flagi | `pipeline`, `report` |
 | `evaluation` | Podział po `sequence`, metryki §7, kalibracja | `cascade`, `questions`, pandas | `cli eval`, `report` |
 | `report` | Zapis plików wynikowych | Jinja2, Pillow, `profile`, `candidates`, `evaluation` | `pipeline` |
-| `pipeline` | Kolejność kroków F2→F7, `--no-model` | wszystkie moduły rdzenia + porty | `cli` |
+| `pipeline` | Kolejność kroków F2→F7, tryb bez modelu (domyślny), manifest płatnego odczytu | wszystkie moduły rdzenia + porty | `cli` |
 
 ---
 
@@ -152,7 +152,7 @@ Opis koncepcyjny; dokładne pola zbiorów źródłowych — ADR-001 §4.
 
 | Model | Cel | Kluczowe pola (typ) | Relacje | Trwałość |
 |---|---|---|---|---|
-| `RunParams` | Parametry uruchomienia | `run_id` (str), `bbox` (4×float, WGS84), `attributes` (lista enum), `source_name` (str), `dataset` (`signs` \| `photos`), `no_model` (bool), `limits` (`max_queries` int, `max_usd` decimal), `models` (per poziom: id, reasoning effort), `thresholds` (per poziom × model × atrybut, float 0–1; ADR-003 §3.5), `seed` (str) | 1 run → wiele wyników | `run.json` w katalogu runu |
+| `RunParams` | Parametry uruchomienia | `run_id` (str), `bbox` (4×float, WGS84), `attributes` (lista enum), `source_name` (str), `dataset` (`signs` \| `photos`), `model_reading` (bool, domyślnie `false`), `confirmation` (`interactive` \| `flag_yes` \| `cache_only` \| `declined` \| null), `limits` (`max_queries` int, `max_usd` decimal), `models` (per poziom: id, reasoning effort), `thresholds` (per poziom × model × atrybut, float 0–1; ADR-003 §3.5), `seed` (str) | 1 run → wiele wyników | `run.json` w katalogu runu |
 | `SourceDescriptor` | Metadane użytego źródła (F7.6) | `name`, `type`, `access`, `tables_or_paths` (lista), `read_started_at`/`read_finished_at` (UTC), bez sekretów | 1 run → 1 źródło | `run.json`, raport |
 | `DataBundle` | Kontrakt danych z dowolnego źródła | zbiory `osm_roads`, `overture_segments`, `photos`, `photo_road_links`, `traffic_signs`, opcjonalnie `signs`, `sign_labels`, `sign_nearest_osm`, `reference_labels`; wszystkie geometrie EPSG:4326 | produkowany przez adapter | tylko w pamięci |
 | `RejectedRecord` | Odrzucony rekord (F2.3) | `dataset`, `record_id`, `reason` (enum: `missing_file`, `hash_mismatch`, `missing_geometry`, `outside_bbox`, `invalid_value`), `detail` (str) | n → 1 run | profil, raport |
@@ -173,21 +173,23 @@ Opis koncepcyjny; dokładne pola zbiorów źródłowych — ADR-001 §4.
 
 Wszystkie polecenia przyjmują `--config <ścieżka>` i `--output text|json` (domyślnie `text`). Przy `--output json` stdout zawiera **wyłącznie** jeden dokument JSON (koperta poniżej); komunikaty diagnostyczne idą na stderr.
 
-**Koperta JSON:** `ok` (bool), `command` (str), `exit_code` (int), `result` (obiekt, gdy `ok`), `error` (obiekt `code` — stały identyfikator np. `invalid_bbox`, `unknown_source`, `source_unavailable`, `auth_failed`, `budget_exceeded`; `message` — po polsku; `hint` — sugestia alternatywy, np. inne źródło), `warnings` (lista str).
+**Koperta JSON:** `ok` (bool), `command` (str), `exit_code` (int), `result` (obiekt, gdy `ok`), `error` (obiekt `code` — stały identyfikator np. `invalid_bbox`, `unknown_source`, `source_unavailable`, `auth_failed`, `budget_exceeded`, `confirmation_required`; `message` — po polsku; `hint` — sugestia alternatywy, np. inne źródło), `warnings` (lista str).
 
-**Kody wyjścia (F8.9):** `0` sukces; `1` błąd danych/walidacji (bbox, konfiguracja, nieznane źródło, naruszenie kontraktu); `2` źródło niedostępne lub brak uprawnień (brak tokenu, 401/403, timeout połączenia, `FAILED` zapytania z błędem uprawnień); `3` run **zakończony**, ale co najmniej jedno pytanie dostało `budget_exceeded` (D10-I6).
+**Kody wyjścia (F8.9):** `0` sukces (także po odmowie `N` w potwierdzeniu — raport bez odczytu modelem); `1` błąd danych/walidacji (bbox, konfiguracja, nieznane źródło, naruszenie kontraktu, `confirmation_required`: włączony odczyt modelem bez TTY i bez `--yes`); `2` źródło niedostępne lub brak uprawnień (brak tokenu, 401/403, timeout połączenia, `FAILED` zapytania z błędem uprawnień); `3` run **zakończony**, ale co najmniej jedno pytanie dostało `budget_exceeded` (D10-I6).
 
 Kolejność: `1` i `2` przerywają run przed zapisem raportu (`ok=false`, brak `result`). `3` występuje tylko po pełnym zapisie raportu: `ok=true`, `result` kompletny, `warnings` zawiera `budget_exceeded: N pytań`. Agent nie powinien ponawiać runu z kodem 3 bez zmiany limitów — ponowienie zużyłoby budżet na te same pytania tylko wtedy, gdy nie ma ich w cache.
 
 | Polecenie | Wejście | Wyjście (`result`) | Błędy |
 |---|---|---|---|
-| `mapqa run` | `--bbox minx,miny,maxx,maxy` (domyślnie `19.80,49.95,20.15,50.15` dla `--dataset photos`; dla `--dataset signs` domyślnie brak filtra bbox — D10-I2), `--attributes speed_limit,surface,lit`, `--source <nazwa>`, `--dataset signs\|photos` (MVP: `signs`), `--no-model`, `--max-queries N` (200), `--max-usd X` (1.00), `--level1-model`, `--level2-model`, `--level2-effort`, `--threshold-l1`, `--threshold-l2` (nadpisują wszystkie atrybuty dla bieżącego modelu danego poziomu), `--split all\|calibration\|test` | `run_id`, `output_dir`, ścieżki plików, liczności lejka kaskady, liczba kandydatów per atrybut/priorytet, koszt per poziom, liczba `budget_exceeded` | 1: niepoprawny bbox (odwrócone granice, lon ∉ [-180,180], lat ∉ [-90,90]), nieznany atrybut, nieznane źródło (z listą dostępnych); 2: źródło niedostępne; 3: budżet |
+| `mapqa run` | `--bbox minx,miny,maxx,maxy` (domyślnie `19.80,49.95,20.15,50.15` dla `--dataset photos`; dla `--dataset signs` domyślnie brak filtra bbox — D10-I2), `--attributes speed_limit,surface,lit`, `--source <nazwa>`, `--dataset signs\|photos` (MVP: `signs`), `--model` (włącza płatny odczyt; domyślnie wyłączony — D11), `--no-model` (wymusza tryb bez modelu mimo `model_reading = true`), `--yes` (potwierdza manifest bez pytania), `--max-queries N` (200), `--max-usd X` (1.00), `--level1-model`, `--level2-model`, `--level2-effort`, `--threshold-l1`, `--threshold-l2` (nadpisują wszystkie atrybuty dla bieżącego modelu danego poziomu), `--split all\|calibration\|test` | `run_id`, `output_dir`, ścieżki plików, `model_reading`, `confirmation`, manifest kosztu, liczności lejka kaskady, liczba kandydatów per atrybut/priorytet, koszt per poziom, liczba `budget_exceeded` | 1: niepoprawny bbox (odwrócone granice, lon ∉ [-180,180], lat ∉ [-90,90]), nieznany atrybut, nieznane źródło (z listą dostępnych), `confirmation_required`; 2: źródło niedostępne; 3: budżet |
 | `mapqa sources list` | — | lista `{name, type, access, is_default, resolved_by}` gdzie `resolved_by` ∈ `flag`, `env`, `config`, `builtin` | 1: niepoprawny plik konfiguracyjny |
 | `mapqa sources check` | `--source`, `--bbox` | `{name, reachable, tables: {nazwa: {total, in_bbox}}, warnings}` | 1: nieznane źródło; 2: brak dostępu |
-| `mapqa eval run` | jak `run`, domyślnie `--split test` | `EvaluationReport` + ścieżka `evaluation.json` | jak `run` |
+| `mapqa eval run` | jak `run`, domyślnie `--split test`; odczyt modelem zawsze włączony, więc zawsze obowiązuje potwierdzenie manifestu (`y/N` albo `--yes`) | `EvaluationReport` + ścieżka `evaluation.json` | jak `run` |
 | `mapqa eval calibrate` | `--split calibration`, `--target-accuracy 0.90`, `--grid 0.50:0.99:0.01` | proponowane progi per poziom × model × atrybut, plik `calibration.json` | jak `run` |
 
-Polecenia `eval` korzystają z tej samej kaskady, cache i budżetu co `run` (ADR-004).
+Polecenia `eval` korzystają z tej samej kaskady, cache, budżetu i potwierdzenia co `run` (ADR-004).
+
+**Potwierdzenie płatnych wywołań (D11):** przy `--model` (albo w `eval`) i co najmniej jednym pytaniu bez trafienia w cache CLI wypisuje manifest (liczba obrazów i pytań, modele per poziom, `max_queries`, `max_usd`) — przy `--output text` na stdout, przy `--output json` na stderr — i czeka na `y/N`. `--yes` pomija pytanie. Stdin bez TTY i brak `--yes` → kod 1, `error.code = confirmation_required`, `hint` = „dodaj `--yes` albo uruchom bez `--model`”, brak raportu, 0 zapytań. Odpowiedź `N` → raport bez odczytu modelem (`skipped_no_model`), `warnings` zawiera `model_reading_declined`, kod 0.
 
 ---
 
@@ -195,7 +197,7 @@ Polecenia `eval` korzystają z tej samej kaskady, cache i budżetu co `run` (ADR
 
 | Zmienna | Cel | Wymagana | Przykład |
 |---|---|---|---|
-| `OPENROUTER_API_KEY` | Klucz OpenRouter (poziom 1, 2, model porównawczy) | Tak, gdy run wywołuje modele; nie przy `--no-model` | `sk-or-…` (nigdy w repo) |
+| `OPENROUTER_API_KEY` | Klucz OpenRouter (poziom 1, 2, model porównawczy) | Tak, gdy run wywołuje modele (`--model`, `eval`); nie w domyślnym trybie bez modelu | `sk-or-…` (nigdy w repo) |
 | `DECISION_MODEL` | Domyślny model decyzyjny poziomu 1, jeśli nie ustawiono go w konfiguracji/flagą (D9) | Nie | `typesafe/jev-1.14` |
 | `LLM_MODEL` | Domyślny model poziomu 2, jeśli nie ustawiono go w konfiguracji/flagą | Nie | `openai/gpt-6-luna` |
 | `MAPQA_SOURCE` | Wybór źródła (precedencja F8.1 poz. 2) | Nie | `course-databricks` |
@@ -213,7 +215,7 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 ### D1. Modularny monolit CLI z portami i adapterami
 **Status:** Accepted
 **Data:** 2026-11-03
-**Kontekst:** PRD wymaga wymiennych źródeł (F8.4), trybu `--no-model` (F1.4) i testów z mockami API. Kroki F3–F7 mają nie zależeć od źródła ani od dostawcy modelu.
+**Kontekst:** PRD wymaga wymiennych źródeł (F8.4), trybu bez modelu (F1.4) i testów z mockami API. Kroki F3–F7 mają nie zależeć od źródła ani od dostawcy modelu.
 **Decyzja:** Jeden pakiet `mapqa` z rdzeniem bez I/O sieciowego i adapterami na brzegach (źródła, klienci modeli, cache, raport). Adapter wybiera rejestr na podstawie konfiguracji.
 **Odrzucone alternatywy:**
 - Skrypty per krok (notebooki/pliki .py): brak wspólnego kontraktu, trudne testy end-to-end i kody wyjścia.
@@ -350,6 +352,19 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 - (-) PRD wymaga aktualizacji sekcji F1.3, F5.9/F5.11, F6.1, F6.3, F8.1, F8.9, §7 i §9.
 **Warunek rewizji:** Aktualizacja PRD przez właściciela produktu; wtedy D10 zmienia status na Superseded dla zmienionych punktów.
 
+### D11. Płatne wywołania modeli domyślnie wyłączone, potwierdzenie manifestu
+**Status:** Accepted
+**Data:** 2026-11-12
+**Kontekst:** Narzędzie uruchamia także agent AI. Pierwotnie (2026-11-03) odczyt modelem był domyślny, a `--no-model` go wyłączał, więc przypadkowe uruchomienie zużywało budżet OpenRouter. Wersja referencyjna prowadzącego (PRD §4.2 pkt 2, ADR-004 §3.3, D-43) domyślnie wyłącza odczyt i wymaga potwierdzenia.
+**Decyzja:** `model_reading = false` domyślnie; `--model` włącza odczyt, `--no-model` wymusza tryb bez modelu. Przed pierwszym płatnym wywołaniem CLI pokazuje manifest i pyta `y/N`; `--yes` potwierdza nieinteraktywnie; brak TTY bez `--yes` → kod 1 `confirmation_required`; odmowa `N` → raport bez odczytu, kod 0 (§6). Przyjęte za wersją referencyjną prowadzącego; kod 1 zamiast osobnego kodu, bo to błąd walidacji wywołania wykryty przed wydaniem pieniędzy (istniejący schemat kodów z §6).
+**Odrzucone alternatywy:**
+- Odczyt domyślnie włączony z `--no-model`: agent lub skrypt wydaje pieniądze przez pominięcie flagi.
+- Brak TTY traktowany jak odmowa `N` (kod 0): agent nie zauważyłby, że odczyt się nie odbył.
+**Konsekwencje:**
+- (+) Uruchomienie bez flag nigdy nie kosztuje; agent musi jawnie podać `--model --yes`.
+- (-) Dwie flagi więcej przy płatnym runie; testy E2E `paid` podają `--model --yes`.
+**Warunek rewizji:** Gdy narzędzie dostanie budżet produkcyjny z rozliczaniem per użytkownik.
+
 ---
 
 ## 9. Diagramy
@@ -422,13 +437,16 @@ sequenceDiagram
   participant P as pipeline
   participant CAS as cascade
   participant REP as report
-  U->>CLI: mapqa run --bbox ... --source local
+  U->>CLI: mapqa run --bbox ... --source local --model
   CLI->>CFG: rozwiąż źródło, limity, progi
   CFG-->>CLI: RunParams (walidacja bbox OK)
   CLI->>P: run(params)
   P->>SRC: load(bbox)
   SRC-->>P: DataBundle + SourceDescriptor
   P->>P: profil, połączenia, porównanie
+  P-->>CLI: manifest (obrazy, pytania, modele, max zapytań, max USD)
+  CLI->>U: Kontynuować? [y/N] (pominięte przy --yes)
+  U-->>CLI: y
   loop każde zdjęcie x pytanie (stała kolejność)
     P->>CAS: resolve(image, question)
     CAS-->>P: CascadeResult
@@ -503,7 +521,8 @@ Szczegółowe tabele scenariuszy są w ADR 001–004. Scenariusze przekrojowe:
 |---|---|---|---|
 | Niepoprawny bbox | `20.15,49.95,19.80,50.15`; `19.8,95,20,96` | kod 1, `invalid_bbox`, brak odczytu danych (adapter nie wywołany) | bbox o zerowej szerokości; spacje w argumencie |
 | Precedencja źródła | flaga + env + config | `--source` > `MAPQA_SOURCE` > `default_source` > `files` | nieznana nazwa → kod 1 i lista nazw |
-| `--no-model` | dane z plików | brak wywołań HTTP (respx bez tras, `assert_all_called=False`, każde żądanie = błąd testu), raport powstaje | brak `OPENROUTER_API_KEY` nie jest błędem |
+| Tryb bez modelu (domyślny i `--no-model`) | dane z plików, bez `--model` | brak wywołań HTTP (respx bez tras, `assert_all_called=False`, każde żądanie = błąd testu), raport powstaje | brak `OPENROUTER_API_KEY` nie jest błędem |
+| Potwierdzenie płatnych wywołań | `--model` bez cache: (a) TTY + `y`, (b) TTY + `N`, (c) stdin bez TTY bez `--yes`, (d) `--yes` | (a) i (d) odczyt modelem, manifest przed 1. żądaniem; (b) raport bez odczytu, kod 0, `model_reading_declined`; (c) kod 1, `confirmation_required`, 0 żądań, brak raportu | pełne pokrycie z cache → brak pytania; `--output json` → manifest na stderr, stdout tylko JSON |
 | Koperta JSON | `--output json` dla każdego polecenia | stdout parsuje się jako jeden obiekt JSON z polami koperty | błąd → `ok=false`, `error.code` |
 | Sekrety | env z fałszywymi tokenami o znanym wzorcu | wzorzec nie występuje w stdout, stderr, logach, cache, raportach | wyjątek z httpx zawierający nagłówki |
 
@@ -520,4 +539,5 @@ Szczegółowe tabele scenariuszy są w ADR 001–004. Scenariusze przekrojowe:
 - TAC-09: Narzędzie uruchamia się w PowerShell na Windows bez WSL/Docker/conda (`uv run --project app mapqa --help` kod 0).
 - TAC-10: Wszystkie progi, limity i modele z PRD mają domyślne wartości w `mapqa.example.toml` i są nadpisywalne flagą CLI (test parametryzowany).
 - TAC-11: Raport, CSV i komunikaty dla człowieka są po polsku; identyfikatory i nazwy pól w oryginale (test snapshot sekcji raportu).
+- TAC-13: Run bez `--model` nie tworzy klienta OpenRouter (0 żądań, brak wymaganego `OPENROUTER_API_KEY`); run z `--model` bez TTY i bez `--yes` kończy się kodem 1 przed pierwszym żądaniem (test z respx zliczającym trasy).
 - TAC-12: Test architektury: moduły rdzenia (`matching`, `normalize`, `compare`, `cascade`, `candidates`, `evaluation`) nie importują `httpx`, `sources.databricks_*` ani `cli`.

@@ -85,7 +85,7 @@ Liczby z przecinkiem dziesiętnym (format polski), dwa miejsca po przecinku dla 
 ### 3.6 Raport (F7)
 
 Sekcje `report.md` w tej kolejności (nagłówki po polsku):
-1. **Parametry uruchomienia** — bbox, atrybuty, zestaw, źródło (`SourceDescriptor`, F7.6), modele i effort, progi, limity, `run_id`, wersja narzędzia.
+1. **Parametry uruchomienia** — bbox, atrybuty, zestaw, źródło (`SourceDescriptor`, F7.6), `model_reading` i sposób potwierdzenia (`interactive`, `flag_yes`, `cache_only`, `declined`), manifest kosztu pokazany przed odczytem, modele i effort, progi, limity, `run_id`, wersja narzędzia. Bez odczytu modelem sekcje modelu mają tekst „Odczyt modelem nie był uruchomiony” (przyjęte za wersją referencyjną prowadzącego, ADR-004 §3.3).
 2. **Profil danych** — liczności per zbiór (total / w bbox), kompletność `maxspeed`, `surface`, `lit` jako „x% (n/N)”, odrzucone rekordy według przyczyny, ostrzeżenia, zgodność połączeń z referencją [P1].
 3. **Lejek kaskady** — per atrybut: pytania ogółem → rozstrzygnięte na poziomie 1 → eskalowane → rozstrzygnięte na poziomie 2 → przekazane człowiekowi; liczby i odsetki z mianownikiem; osobno `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds`, `skipped_no_model`.
 4. **Podsumowanie kandydatów** — tabela atrybut × priorytet; liczba nieporównywalnych z powodami.
@@ -289,8 +289,8 @@ sequenceDiagram
 | EVL-03 baseline Mapillary | Unit | `mapillary_value` z `signs.csv` | wartość liczbowa z nazwy klasy | brak detekcji |
 | EVL-04 nawierzchnia | Unit | 99 × `paved` | adnotacja `no_negative_class`, `passed = null` | — |
 | CAL-01 wybór progu | Unit | syntetyczne pasma pewności | najniższy próg z trafnością ≥ 0,90 i n ≥ 10 | brak progu → 1,00 + ostrzeżenie |
-| E2E-01 `--no-model` | E2E | `mapqa run --no-model --dataset signs` | raport, CSV, lejek z `skipped_no_model`, kod 0 | — |
-| E2E-02 płatny MVP | E2E `paid` | 119 wycinków | sekcja „Rozbieżności znak ↔ OSM” z 46 parami; metryki osobno dla liczb i `none` obok detektora | — |
+| E2E-01 tryb bez modelu | E2E | `mapqa run --dataset signs` (bez `--model`) | raport, CSV, lejek z `skipped_no_model`, „Odczyt modelem nie był uruchomiony”, 0 żądań, kod 0 | `--no-model` daje bajtowo ten sam `manual_queue.csv` |
+| E2E-02 płatny MVP | E2E `paid` | `mapqa run --model --yes`, 119 wycinków | sekcja „Rozbieżności znak ↔ OSM” z 46 parami; metryki osobno dla liczb i `none` obok detektora | — |
 
 ### Techniczne kryteria akceptacji
 
