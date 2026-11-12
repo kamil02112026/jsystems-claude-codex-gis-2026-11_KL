@@ -21,7 +21,7 @@ Nie obejmuje: łączenia zdjęć z drogami (ADR-002), modeli (ADR-003), raportu 
 |---|---|---|
 | Databricks SQL Statement Execution API 2.0 | `/websites/databricks_api`; samouczek https://docs.databricks.com/aws/en/dev-tools/sql-execution-tutorial | `POST /api/2.0/sql/statements`, `GET .../{statement_id}`, `GET .../result/chunks/{chunk_index}` |
 | Databricks CLI (wersja sprawdzona w danych kursu: 1.23.0) | `/databricks/cli` | `databricks api post /api/2.0/sql/statements --json ...` |
-| GeoPandas 1.2.0 | `/geopandas/geopandas` | `read_parquet` (GeoParquet), `GeoSeries.from_wkb`, `to_crs` |
+| DuckDB 1.5.6 + `spatial` | `/websites/duckdb_current` | `read_parquet` (GeoParquet), `read_csv`, `DESCRIBE`, `ST_GeomFromHEXWKB`, `ST_Intersects`, `ST_MakeEnvelope` (silnik — ADR-000 D2) |
 | httpx 0.28.1 | https://www.python-httpx.org/ | Klient REST |
 | Pydantic 2.14.2 | https://docs.pydantic.dev/latest/ | Modele konfiguracji |
 | Dane kursu | `course-materials/exercise-data/map-qa/README.md`, `DATABRICKS.md`, `sources.json` | Nazwy plików, liczności, kodowanie geometrii |
@@ -63,10 +63,10 @@ Rejestr `sources.registry` mapuje `type` → klasa adaptera. Nowy typ (PostGIS, 
 
 ### 3.3 Adapter `files` [MVP]
 
-- Czyta z katalogu `path` pliki o nazwach z danych kursu: `osm_roads.parquet`, `overture_segments.parquet` (GeoPandas `read_parquet`), `photos.csv`, `photo_road_links.csv`, `traffic_signs.geojson`, oraz zestaw `signs/`: `signs.csv`, `nearest_osm.csv`, obrazy `crops/`, `photos/`. Adapter **nie** czyta etykiet referencyjnych (`reference_labels.csv`, `signs/labels.csv`) — czyta je wyłącznie moduł `evaluation` (ADR-004 §3.10).
+- Czyta z katalogu `path` pliki o nazwach z danych kursu: `osm_roads.parquet`, `overture_segments.parquet` (DuckDB `read_parquet`, widoki o stałych nazwach), `photos.csv`, `photo_road_links.csv`, `traffic_signs.geojson`, oraz zestaw `signs/`: `signs.csv`, `nearest_osm.csv`, obrazy `crops/`, `photos/`. Adapter **nie** czyta etykiet referencyjnych (`reference_labels.csv`, `signs/labels.csv`) — czyta je wyłącznie moduł `evaluation` (ADR-004 §3.10).
 - Pliki otwierane wyłącznie do odczytu; adapter nie tworzy plików w `path` (F2.2). Adapter zwraca listę wszystkich przeczytanych plików (dane i obrazy) do manifestu wejść; pipeline liczy ich `sha256` przed i po runie (ADR-000 §6, kod 4).
-- Filtr bbox po wczytaniu: drogi — zachowane całe geometrie przecinające bbox (`intersects` z prostokątem w EPSG:4326, osie lon/lat); zdjęcia i znaki — punkt w bbox (granice włącznie). Zestaw `signs` jest filtrowany tylko przy jawnym `--bbox` (ADR-000 D10-I2); 24 ze 119 wycinków leży poza bbox Krakowa (pole `area`). Rekordy poza bbox trafiają do profilu jako `outside_bbox` (liczba, bez listy przy > 100).
-- CRS: OSM ma EPSG:4326, Overture OGC:CRS84. Oba mają kolejność lon/lat; adapter ustawia CRS wyniku na EPSG:4326 bez transformacji współrzędnych (CRS84 i 4326 różnią się tylko deklarowaną kolejnością osi).
+- Filtr bbox w SQL DuckDB przy odczycie: drogi — zachowane całe geometrie przecinające bbox (`ST_Intersects(geometry, ST_MakeEnvelope(:minx, :miny, :maxx, :maxy))` w EPSG:4326, osie lon/lat, wartości jako parametry); zdjęcia i znaki — punkt w bbox (granice włącznie). Zestaw `signs` jest filtrowany tylko przy jawnym `--bbox` (ADR-000 D10-I2); 24 ze 119 wycinków leży poza bbox Krakowa (pole `area`). Rekordy poza bbox trafiają do profilu jako `outside_bbox` (liczba, bez listy przy > 100).
+- CRS: OSM ma EPSG:4326, Overture OGC:CRS84. Oba mają kolejność lon/lat; adapter traktuje oba jako EPSG:4326 (lon, lat) bez transformacji współrzędnych (CRS84 i 4326 różnią się tylko deklarowaną kolejnością osi). Każda późniejsza transformacja używa `always_xy := true` (ADR-002 §3.1).
 - Zdjęcia: plik obrazu = `photos_dir/filename` (dla `photos.csv`: katalog `offline/` albo `data/photos/` z `download_photos.py`; dla `signs`: `signs/crops/` i `signs/photos/`). Weryfikacja `sha256` pliku z manifestem (`sha256` dla pliku pochodnego, `crop_sha256` dla wycinka). Brak pliku → `missing_file`; inny hash → `hash_mismatch`. Rekord pozostaje w `photos` z polem `image_status`, ale nie trafia do kaskady.
 
 ### 3.4 Adapter `databricks`, dostęp `rest` [P1]
@@ -77,7 +77,7 @@ Przebieg jednego zapytania:
 3. `SUCCEEDED`: odczyt `result.data_array`; dopóki jest `next_chunk_internal_link`, `GET` tej ścieżki (doklejonej do hosta bez podwójnego `/`). Suma wierszy musi równać się `manifest.total_row_count`; inaczej `ContractViolation`.
 4. `FAILED`: wyjątek `QueryFailed` z `error_code` i `message` (bez treści zapytania z parametrami); **nigdy** pusty wynik. `CANCELED`/`CLOSED` bez danych: `QueryFailed`.
 5. HTTP 401/403 → `AuthFailed`; HTTP 429/5xx/timeout połączenia **przy wysyłaniu** → `SourceUnavailable` bez ponowienia (zapytanie mogło wystartować). Odpytywanie `GET` statusu może być powtórzone przy błędzie sieci do 3 razy, bo nie uruchamia zapytania ponownie.
-6. Konwersja: kolumny według `type_name` (`LONG`/`INT` → Int64, `DOUBLE`/`FLOAT` → float, `BOOLEAN`, `TIMESTAMP` → datetime UTC, `STRING`); geometria pobierana w SQL jako `hex(geometry)` i dekodowana w Pythonie z WKB; struktury/listy Overture pobierane jako `to_json(kolumna)` i parsowane do tej samej postaci co w GeoParquet.
+6. Konwersja: kolumny według `type_name` (`LONG`/`INT` → Int64, `DOUBLE`/`FLOAT` → float, `BOOLEAN`, `TIMESTAMP` → datetime UTC, `STRING`); geometria pobierana w SQL jako `hex(geometry)` i dekodowana w DuckDB (`ST_GeomFromHEXWKB`; nazwę funkcji potwierdza test na DuckDB 1.5.6) przy wstawianiu wierszy do tabeli w połączeniu DuckDB; struktury/listy Overture pobierane jako `to_json(kolumna)` i parsowane do tej samej postaci co w GeoParquet.
 
 **Filtr bbox w SQL (F8.5):** drogi przez `ST_Intersects(ST_GeomFromWKB(geometry, 4326), ST_GeomFromText(<prostokąt z :minx :miny :maxx :maxy>, 4326))` — zwraca całe ways przecinające bbox; zdjęcia przez `longitude BETWEEN :minx AND :maxx AND latitude BETWEEN :miny AND :maxy`. Wartości bbox wyłącznie jako parametry nazwane, nigdy przez sklejanie stringów. Dokładna składnia funkcji `ST_*` w Databricks SQL jest weryfikowana nagraniem (§8, scenariusz DB-01) przed implementacją.
 
@@ -155,7 +155,7 @@ Referencyjne liczności (README danych, PRD kryterium 17): `osm_roads` 99 768, `
 - Databricks jako domyślne: blokuje pracę bez tokenu i testy w CI.
 **Konsekwencje:**
 - (+) MVP i testy działają bez chmury.
-- (-) Filtr bbox po stronie klienta dla plików (pełny odczyt ~24 MB).
+- (-) Filtr bbox dla plików wykonuje lokalny DuckDB przy odczycie (kolumnowo, bez ładowania całych plików do Pythona).
 **Warunek rewizji:** Gdy pliki lokalne przestaną być aktualnym snapshotem (nowe wydanie Overture/OSM tylko w Databricks).
 
 ### D-001-2. INLINE + JSON_ARRAY zamiast EXTERNAL_LINKS + ARROW_STREAM
@@ -174,7 +174,7 @@ Referencyjne liczności (README danych, PRD kryterium 17): `osm_roads` 99 768, `
 **Status:** Accepted
 **Data:** 2026-11-03
 **Kontekst:** Tabele mają geometrię BINARY WKB; reprezentacja BINARY w JSON_ARRAY nie jest opisana w przeczytanej dokumentacji.
-**Decyzja:** Zapytanie zwraca `hex(geometry)` (string), Python dekoduje WKB i ustawia EPSG:4326. Listy/struktury Overture i mapy tagów jako `to_json(...)`.
+**Decyzja:** Zapytanie zwraca `hex(geometry)` (string), DuckDB dekoduje WKB (`ST_GeomFromHEXWKB`) i geometria jest traktowana jako EPSG:4326 (lon, lat). Listy/struktury Overture i mapy tagów jako `to_json(...)`.
 **Odrzucone alternatywy:**
 - `ST_AsText` (WKT): większy rozmiar i utrata precyzji przy formatowaniu liczb.
 - Surowa kolumna BINARY: niepewne kodowanie (base64?) bez nagrania.
@@ -278,7 +278,7 @@ sequenceDiagram
     A->>D: GET next_chunk_internal_link
     D-->>A: 200 data_array, next link albo brak
   end
-  A->>A: suma wierszy == total_row_count, dekodowanie WKB
+  A->>A: suma wierszy == total_row_count, wstawienie do DuckDB, ST_GeomFromHEXWKB
 ```
 
 ### Sekwencja: błędy Databricks

@@ -19,10 +19,9 @@ Nie obejmuje: odczytu ze zdjęć (ADR-003), reguł kandydatów i priorytetów (A
 
 | Biblioteka | Context7 ID albo dokumentacja | Zastosowanie |
 |---|---|---|
-| GeoPandas 1.2.0 | `/geopandas/geopandas` | `to_crs("EPSG:2180")`, `sindex.query(..., predicate="dwithin", distance=...)`, `sjoin_nearest(max_distance, distance_col)` |
-| Shapely 2.2.0 | https://shapely.readthedocs.io/en/stable/ | `line_locate_point`, `line_interpolate_point`, `substring`, dystans |
-| pyproj 3.8.0 | https://pyproj4.github.io/pyproj/stable/ | `Transformer` z `always_xy=True`, `Geod` (azymut geodezyjny) |
-| DuckDB spatial (porównanie, nieużywany w runtime) | `/websites/duckdb_current` | `ST_Transform(geom, 'EPSG:4326', 'EPSG:2180', always_xy := true)` — wymaga `always_xy`, bo EPSG:4326 ma oś lat/lon |
+| DuckDB 1.5.6 + `spatial` (silnik, ADR-000 D2) | `/websites/duckdb_current`; https://duckdb.org/docs/stable/core_extensions/spatial/functions | `ST_Transform(geom, 'EPSG:4326', 'EPSG:2180', always_xy := true)` — wymaga `always_xy`, bo EPSG:4326 ma oś lat/lon; `ST_DWithin`, `ST_Distance`, `ST_LineLocatePoint` (ułamek długości 2D), `ST_LineInterpolatePoint`, `ST_LineSubstring` |
+| pyproj 3.8.0 (dev, wyrocznia) | https://pyproj4.github.io/pyproj/stable/ | `Transformer` z `always_xy=True`, `Geod` (azymut geodezyjny) — tylko w testach |
+| GeoPandas 1.2.0 (dev, wyrocznia) | `/geopandas/geopandas` | `to_crs("EPSG:2180")`, dystans — tylko w testach |
 | Reguła połączeń kursu | `course-materials/exercise-data/map-qa/sources.json` → `links` | Promień, styczna, ranking, remisy, Overture |
 | OSM `maxspeed` | https://wiki.openstreetmap.org/wiki/Key:maxspeed | Składnia wartości, jednostki, wartości domyślne `PL:*` |
 | Overture transportation schema | https://docs.overturemaps.org/schema/reference/transportation/segment/ | `speed_limits`, `road_surface`, `between`, `when`, `sources` |
@@ -33,16 +32,16 @@ Nie obejmuje: odczytu ze zdjęć (ADR-003), reguł kandydatów i priorytetów (A
 
 ### 3.1 CRS
 
-- Wszystkie obliczenia metryczne w **EPSG:2180** (PUWG 1992). Transformacja: GeoPandas `to_crs("EPSG:2180")` dla warstw i `pyproj.Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)` dla pojedynczych punktów. Dane wejściowe mają kolejność lon/lat (OSM EPSG:4326 w GeoParquet, Overture OGC:CRS84; `sources.json` → `coordinate_order = "longitude, latitude"`).
-- Funkcje rdzenia przyjmują i zwracają geometrie z jawnym CRS; funkcja licząca dystans odrzuca wejście w CRS geograficznym (`ValueError`), co zapobiega liczeniu w stopniach (kryterium 3).
-- Kierunki (`way_bearing`, `heading`) to azymuty względem **północy geograficznej**: lokalną styczną wyznaczamy w EPSG:2180, a jej końce przeliczamy z powrotem do EPSG:4326 i liczymy azymut geodezyjny (`pyproj.Geod`, elipsoida WGS84). Unikamy błędu zbieżności południków PUWG 1992 (do ~±4° na krańcach Polski).
+- Wszystkie obliczenia metryczne w **EPSG:2180** (PUWG 1992). Transformacja wyłącznie w DuckDB: `ST_Transform(geom, 'EPSG:4326', 'EPSG:2180', always_xy := true)` dla warstw i punktów aparatu (punkt budowany jako (lon, lat)). Bez `always_xy` DuckDB traktuje EPSG:4326 jako (lat, lon) i daje błędny wynik bez komunikatu. Kolumny metryczne mają przyrostek `_2180`; test statyczny zabrania `ST_Distance`/`ST_DWithin` na innych kolumnach (przyjęte za wersją referencyjną prowadzącego, ADR-002 §3.1). Dane wejściowe mają kolejność lon/lat (OSM EPSG:4326 w GeoParquet, Overture OGC:CRS84; `sources.json` → `coordinate_order = "longitude, latitude"`).
+- Funkcje rdzenia w Pythonie przyjmują wyniki zapytań z jawną informacją o CRS (nazwa kolumny `_2180` albo `_4326`); funkcja licząca dystans/ranking odrzuca kolumny bez `_2180` (`ValueError`), co zapobiega liczeniu w stopniach (kryterium 3).
+- Kierunki (`way_bearing`, `heading`) to azymuty względem **północy geograficznej**: lokalną styczną wyznaczamy w EPSG:2180, a jej końce przeliczamy z powrotem do EPSG:4326 (`ST_Transform(..., 'EPSG:2180', 'EPSG:4326', always_xy := true)`) i liczymy azymut początkowy funkcją w Pythonie (stdlib `math`, wzór na sferze; dla odcinka 10 m różnica względem elipsoidy WGS84 jest pomijalna). Test porównuje wynik z `pyproj.Geod` (WGS84) z tolerancją 0,1°. Unikamy błędu zbieżności południków PUWG 1992 (do ~±4° na krańcach Polski).
 
 ### 3.2 Łączenie zdjęcie → droga OSM [P1]
 
 Reguła zgodna z `sources.json` → `links`, aby wynik był porównywalny z `photo_road_links.csv` (F3.5):
 
-1. **Kandydaci:** drogi OSM w promieniu **25 m** od pozycji aparatu (`sindex.query` z `predicate="dwithin"`, `distance=25` na warstwach EPSG:2180). Brak kandydata → `no_osm_within_25m`, `osm_way_id = null`; to stan danych, nie kandydat rozbieżności (F3.4).
-2. **Lokalna styczna:** punkt aparatu rzutowany na linię (`line_locate_point`); styczna = odcinek między punktami linii w odległości −5 m i +5 m od rzutu (przycięte do końców linii); azymut geodezyjny jak w §3.1.
+1. **Kandydaci:** drogi OSM w promieniu **25 m** od pozycji aparatu (SQL DuckDB: `ST_DWithin(road.geom_2180, photo.geom_2180, 25)` z `ST_Distance` jako `distance_m`). Brak kandydata → `no_osm_within_25m`, `osm_way_id = null`; to stan danych, nie kandydat rozbieżności (F3.4).
+2. **Lokalna styczna:** punkt aparatu rzutowany na linię (`ST_LineLocatePoint` na `geom_2180`, ułamek długości); styczna = `ST_LineSubstring` między ułamkami odpowiadającymi −5 m i +5 m od rzutu (przycięte do [0, 1]); azymut geodezyjny jak w §3.1. Kroki 1–2 to jedno zapytanie SQL; kroki 3–6 liczy Python na jego wyniku.
 3. **Różnica kierunku:** `directed_bearing_diff` = |heading − way_bearing| sprowadzona do 0–180°; `bearing_diff` = min(d, 180 − d) w zakresie **0–90°** (oba kierunki geometrii, F3.2).
 4. **Ranking:** `rank = distance_m + bearing_diff / 9`; brak heading → `rank = distance_m + 5`. Najniższy `rank` wygrywa.
 5. **Remisy:** przy równym `rank` (różnica < 1e-9) wygrywa mniejszy `distance_m`, potem mniejszy `osm_id` — wynik deterministyczny.
@@ -109,7 +108,7 @@ Każda funkcja normalizująca zwraca `AttributeValue` (`raw` bez zmian, `normali
 **Overture `speed_limits` [P3]:** lista reguł; dla porównania:
 1. Odrzucamy reguły z `min_speed` bez `max_speed`.
 2. Reguły bez `when` i z `between` = null albo `[0, 1]` → kandydat wartości bazowej.
-3. Reguły z `between = [a, b]` stosujemy, gdy pozycja liniowa rzutu aparatu na segment (0–1, `line_locate_point(normalized=True)`) ∈ [a, b].
+3. Reguły z `between = [a, b]` stosujemy, gdy pozycja liniowa rzutu aparatu na segment (0–1, `ST_LineLocatePoint` na geometrii segmentu w EPSG:2180) ∈ [a, b].
 4. Reguły z `when` zawierającym wyłącznie `heading` stosujemy jak tagi kierunkowe OSM; z innymi warunkami (`vehicle`, `during`, `mode`, `using`) → pomijane w porównaniu, zachowane w `raw`.
 5. Jedna wartość → `ok`; zero → `missing`; więcej niż jedna różna (|Δ| ≥ 0,5 km/h) → `not_comparable`. Jednostki `mph` przeliczane jak w OSM (×1,609344, zaokrąglenie do 0,01). Overture podaje wartości jawne: `speed_source = explicit`.
 
@@ -174,7 +173,7 @@ Gdy którakolwiek strona ma `speed_source = implicit`, `ComparisonResult.implici
 **Kontekst:** F3.5 porównuje własne dopasowanie z `photo_road_links.csv`. Różne reguły rankingu dałyby rozbieżności, które nie mówią nic o jakości.
 **Decyzja:** Ranking `distance_m + bearing_diff/9`, kara 5 m za brak heading, remisy po dystansie i `osm_id`, `ambiguous_candidates` przy marginesie 2 m, styczna ±5 m, azymut geodezyjny.
 **Odrzucone alternatywy:**
-- Najbliższa droga bez kierunku (`sjoin_nearest`): myli jezdnie równoległe i dojazdy.
+- Najbliższa droga bez kierunku (minimum `ST_Distance`): myli jezdnie równoległe i dojazdy.
 - Ważony ranking z kalibracją wag: brak etykiet połączeń do kalibracji w PoC.
 **Konsekwencje:**
 - (+) Wysoka oczekiwana zgodność z danymi referencyjnymi; różnice wskazują błąd implementacji.
@@ -257,10 +256,10 @@ classDiagram
 ```mermaid
 sequenceDiagram
   participant M as OwnMatcher
-  participant IDX as sindex EPSG:2180
-  participant G as pyproj Geod
-  M->>M: punkt aparatu do EPSG:2180
-  M->>IDX: query(dwithin 25 m)
+  participant IDX as DuckDB (geom_2180)
+  participant G as azymut (math)
+  M->>IDX: ST_Transform punktu aparatu (always_xy)
+  M->>IDX: ST_DWithin 25 m, ST_Distance, ST_LineLocatePoint
   IDX-->>M: kandydaci (0..n)
   alt brak kandydatów
     M-->>M: link osm null, flaga no_osm_within_25m
@@ -302,14 +301,14 @@ sequenceDiagram
 
 ## 8. Strategia testów
 
-Testy jednostkowe na syntetycznych geometriach z ręcznie policzonymi wynikami (punkty i linie zdefiniowane w EPSG:2180, przeliczone do 4326 w fixture), plus testy E2E na danych kursu.
+Testy na syntetycznych geometriach z ręcznie policzonymi wynikami (punkty i linie zdefiniowane w EPSG:2180, przeliczone do 4326 w fixture) w DuckDB in-memory, z GeoPandas/pyproj jako niezależną wyrocznią, plus testy E2E na danych kursu.
 
 | Scenariusz | Typ | Wejście | Oczekiwany wynik | Przypadki brzegowe |
 |---|---|---|---|---|
-| CRS-01 dystans w metrach | Unit | dwa punkty 4326 o znanej odległości (odcinek 100 m wzdłuż osi X w EPSG:2180, przeliczony do 4326) | 100 m ± 0,5 m (kryterium 3) | wejście w 4326 do funkcji metrycznej → `ValueError` |
-| CRS-02 kolejność osi | Unit | punkt Krakowa (19,94; 50,06) | współrzędne EPSG:2180 x ≈ 566 tys., y ≈ 244 tys. (zakresy sprawdzone dla Krakowa) | zamienione lon/lat → test wykrywa |
+| CRS-01 dystans w metrach | Integration | dwa punkty 4326 o znanej odległości (odcinek 100 m wzdłuż osi X w EPSG:2180, przeliczony do 4326) | DuckDB: 100,00 ± 0,01 m, zgodnie z wyrocznią GeoPandas/pyproj (kryterium 3: ± 0,5 m) | kolumna bez `_2180` do funkcji metrycznej → `ValueError` |
+| CRS-02 kolejność osi | Integration | punkt Krakowa (19,94; 50,06) | `ST_Transform(..., always_xy := true)` = pyproj `always_xy=True` do 0,01 m; x ≈ 566 tys., y ≈ 244 tys. | bez `always_xy` test-strażnik wykrywa zamianę osi (wynik poza Polską) |
 | HDG-01 północ | Unit | `heading = 0.0`, droga N–S | `bearing_diff = 0`, brak `missing_heading` (kryterium 4) | `heading = 360.0` ≡ 0 |
-| HDG-02 brak kierunku | Unit | `heading = null` | `missing_heading`, `rank = distance + 5`, `heading` pozostaje null | NaN z pandas |
+| HDG-02 brak kierunku | Unit | `heading = null` | `missing_heading`, `rank = distance + 5`, `heading` pozostaje null | NaN/NULL z Arrow |
 | MAT-01 dwa kierunki | Unit | droga W–E, heading 270° | `bearing_diff = 0` (oba kierunki geometrii) | heading 89° vs 271° |
 | MAT-02 remis | Unit | dwie drogi o identycznym `rank` | wybór mniejszego dystansu, potem mniejszego `osm_id`; `ambiguous_candidates` | trzy drogi w marginesie 2 m |
 | MAT-03 brak drogi | Unit | najbliższa droga 25,1 m | `no_osm_within_25m`, brak kandydata rozbieżności | dokładnie 25,0 m → kandydat |
@@ -331,7 +330,8 @@ Testy jednostkowe na syntetycznych geometriach z ręcznie policzonymi wynikami (
 
 ### Techniczne kryteria akceptacji
 
-- TAC-002-01: Funkcje metryczne odmawiają geometrii w CRS geograficznym (test negatywny).
+- TAC-002-01: Funkcje metryczne odmawiają geometrii w CRS geograficznym (test negatywny); żadne zapytanie SQL nie wywołuje funkcji dystansu na kolumnie bez przyrostka `_2180` (test statyczny, ADR-000 TAC-15).
+- TAC-002-06: Azymut stycznej z funkcji `math` różni się od `pyproj.Geod` o ≤ 0,1° na 20 losowych (stały seed) drogach danych kursu.
 - TAC-002-02: Dla danych kursu odsetek zgodności własnego `osm_way_id` z `photo_road_links.csv` jest raportowany z mianownikiem; wynik < 95% blokuje zamknięcie P1 do czasu wyjaśnienia różnic.
 - TAC-002-03: Każda wartość wejściowa normalizacji ma w wyniku niezmienione `raw` (test właściwości na wszystkich unikalnych `maxspeed` z `osm_roads.parquet`).
 - TAC-002-04: Żadne zdjęcie nie ma `heading` zamienionego z null na 0 po przejściu przez matching (porównanie kolumny przed/po).

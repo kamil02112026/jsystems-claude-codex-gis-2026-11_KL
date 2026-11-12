@@ -24,24 +24,22 @@ Interfejsy (adapter źródła, kontrakt danych, klient modelu) projektujemy od M
 
 ## 2. Odniesienia do dokumentacji technologii
 
-Wersje sprawdzone 2026-11-03 (`pip index versions`, PyPI). Identyfikatory Context7 zweryfikowane w tej sesji przez `resolve-library-id` i `query-docs`; gdzie ID nie było sprawdzane, podano oficjalną dokumentację.
+Wersje sprawdzone 2026-11-03 (`pip index versions`, PyPI); duckdb 1.5.6, pyarrow 23.0.1, geopandas 1.2.0 i Pillow 12.0.0 — według poleceń z README danych kursu (2026-11-12, za wersją referencyjną prowadzącego). Zależności tylko testowe oznaczono „(dev)”. Identyfikatory Context7 zweryfikowane w tej sesji przez `resolve-library-id` i `query-docs`; gdzie ID nie było sprawdzane, podano oficjalną dokumentację.
 
 | Biblioteka / usługa | Wersja przypięta | Context7 ID albo oficjalna dokumentacja | Zastosowanie |
 |---|---|---|---|
 | Python | 3.12 (przez uv) | https://docs.python.org/3.12/ | Środowisko uruchomieniowe |
 | uv | najnowsza stabilna w chwili instalacji | https://docs.astral.sh/uv/ | Zarządzanie Pythonem, zależnościami, lockfile |
 | OpenRouter (Decisions API, Chat Completions) | API `alpha` / `v1` | `/openrouterteam/docs` | Poziom 1 i 2 kaskady, model porównawczy |
-| GeoPandas | 1.2.0 | `/geopandas/geopandas` | Wczytanie GeoParquet, CRS, łączenie przestrzenne |
-| Shapely | 2.2.0 | https://shapely.readthedocs.io/en/stable/ | Geometria, rzutowanie punktu na linię |
-| pyproj | 3.8.0 | https://pyproj4.github.io/pyproj/stable/ | Transformacja EPSG:4326/CRS84 → EPSG:2180 |
-| pandas | 3.1.0 | https://pandas.pydata.org/docs/ | Tabele CSV, metryki |
-| pyarrow | 26.0.1 | https://arrow.apache.org/docs/python/ | Odczyt Parquet |
-| DuckDB (+ spatial) | 2.0.0 | `/websites/duckdb_current` | Tylko narzędzie deweloperskie/profilowe, nie zależność runtime (decyzja D2) |
+| DuckDB (+ rozszerzenie `spatial`) | 1.5.6 | `/websites/duckdb_current` (obecnie przekierowane na `/websites/duckdb`); https://duckdb.org/docs/stable/core_extensions/spatial/overview | **Silnik obliczeń przestrzennych i tabelarycznych (D2):** odczyt GeoParquet/CSV, filtr bbox, `ST_Transform(..., always_xy := true)`, `ST_Distance`, `ST_DWithin`, `ST_LineLocatePoint`, `ST_LineInterpolatePoint`, `ST_LineSubstring`, agregaty profilu. Wersja z README danych kursu (zweryfikowane polecenie) |
+| pyarrow | 23.0.1 | https://arrow.apache.org/docs/python/ | Wymiana danych DuckDB ↔ Python (Arrow); wersja z README danych kursu |
+| GeoPandas (dev) | 1.2.0 | `/geopandas/geopandas` | **Tylko** niezależna wyrocznia w testach dystansu i CRS (nie w ścieżce produkcyjnej, D2) |
+| pyproj (dev) | 3.8.0 | https://pyproj4.github.io/pyproj/stable/ | **Tylko** wyrocznia transformacji i azymutu (`Transformer` z `always_xy=True`, `Geod`) w testach |
 | Databricks SQL Statement Execution API | REST 2.0 | `/websites/databricks_api` | Adapter `databricks` dostęp `rest` [P1] |
 | Databricks CLI | zainstalowana wersja | `/databricks/cli` | Adapter `databricks` dostęp `cli` [P1] |
 | httpx | 0.28.1 | https://www.python-httpx.org/ | Klient HTTP OpenRouter i Databricks |
 | respx | 0.23.1 | https://lundberg.github.io/respx/ | Mock httpx w testach (z nagranych odpowiedzi) |
-| Typer | 0.27.3 | https://typer.tiangolo.com/ | CLI |
+| argparse | stdlib 3.12 | https://docs.python.org/3.12/library/argparse.html | CLI (D13) |
 | Pydantic | 2.14.2 | https://docs.pydantic.dev/latest/ | Walidacja konfiguracji, modele wyników, JSON |
 | Jinja2 | 3.1.6 | https://jinja.palletsprojects.com/en/stable/ | Szablony raportu MD/HTML |
 | Pillow | 12.0.0 (świadomie nie 13.0.0) | https://pillow.readthedocs.io/en/stable/ | Przygotowanie obrazu dla modelu, miniatury. Wersja zgodna z danymi kursu: README `exercise-data/map-qa` podaje, że kadry (JPEG q82) i wycinki (JPEG q92) powstały w Pillow 12.0.0, a inna wersja biblioteki JPEG może zmienić bajty przeskalowanego obrazu i dać niezgodny `sha256` (przyjęte za wersją referencyjną prowadzącego) |
@@ -49,7 +47,7 @@ Wersje sprawdzone 2026-11-03 (`pip index versions`, PyPI). Identyfikatory Contex
 | tomllib | stdlib 3.12 | https://docs.python.org/3.12/library/tomllib.html | Odczyt `mapqa.toml` |
 | sqlite3 | stdlib 3.12 | https://docs.python.org/3.12/library/sqlite3.html | Cache odpowiedzi modeli |
 
-**Zasada przypinania:** wersje powyżej wpisujemy jako dokładne (`==`) w `app/pyproject.toml` i zatwierdzamy `uv.lock`. Pillow jest wyjątkiem od zasady „najnowsza wersja”: pozostaje 12.0.0 także przy aktualizacji zależności, dopóki dane kursu nie zostaną wygenerowane nowszą wersją. Jeśli `uv lock` nie znajdzie spójnego zestawu (np. pandas 3.1.0 z geopandas 1.2.0), implementujący agent obniża **jedną** bibliotekę (nigdy Pillow) do najnowszej zgodnej wersji, zapisuje przyczynę w sekcji „Odchylenia od ADR” w opisie PR i aktualizuje tę tabelę.
+**Zasada przypinania:** wersje powyżej wpisujemy jako dokładne (`==`) w `app/pyproject.toml` i zatwierdzamy `uv.lock`. Pillow jest wyjątkiem od zasady „najnowsza wersja”: pozostaje 12.0.0 także przy aktualizacji zależności, dopóki dane kursu nie zostaną wygenerowane nowszą wersją. Jeśli `uv lock` nie znajdzie spójnego zestawu (np. duckdb 1.5.6 z pyarrow 23.0.1), implementujący agent obniża **jedną** bibliotekę (nigdy Pillow) do najnowszej zgodnej wersji, zapisuje przyczynę w sekcji „Odchylenia od ADR” w opisie PR i aktualizuje tę tabelę.
 
 **Ceny modeli (prowadzący, 12.11.2026):** `typesafe/jev-1.14` 0,042 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 262K; `openai/gpt-6-luna-decisions` 0,10 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 1,1M. Cena `openai/gpt-6-luna` i opóźnienia wszystkich modeli są niepotwierdzone. Koszt każdego zapytania odczytujemy z `usage.cost` odpowiedzi (ADR-003).
 
@@ -69,9 +67,10 @@ app/
   uv.lock
   mapqa.example.toml        przykładowa konfiguracja (kopiowana do mapqa.toml)
   src/mapqa/
-    cli/                    Typer: polecenia run, sources, eval; render text/json; kody wyjścia
+    cli/                    argparse: `main(argv) -> int`, polecenia run, sources, eval; render text/json; kody wyjścia
     config/                 ładowanie TOML + env + flag, precedencja, modele Pydantic
-    contract/               DataBundle, schematy zbiorów, walidatory kontraktu
+    contract/               DataBundle (widoki DuckDB), schematy zbiorów, walidatory kontraktu
+    sql/                    zapytania DuckDB jako pliki .sql (profil, filtr bbox, dystanse w EPSG:2180)
     sources/                port SourceAdapter, files.py, databricks_rest.py [P1], databricks_cli.py [P1], registry
     profile/                profil wejścia (F2.3), odrzucone rekordy
     matching/               łączenie zdjęcie → droga (F3) [P1]; w MVP adapter gotowych dopasowań
@@ -94,10 +93,10 @@ app/
     e2e/                    prawdziwe uruchomienie CLI na danych z plików
     fixtures/
       captures/             nagrane prawdziwe odpowiedzi API + metadane nagrania
-      data/                 małe syntetyczne GeoDataFrame/CSV i 3–5 obrazów testowych
+      data/                 małe syntetyczne CSV/GeoParquet i 3–5 obrazów testowych
 mapqa.toml                  (opcjonalnie, w katalogu roboczym; ignorowany przez Git, jeśli lokalny)
 reports/map-qa/<run_id>/    wyniki uruchomień (ignorowane przez Git)
-course-materials/exercise-data/map-qa/data/   cache i pobrane zdjęcia (ignorowane przez Git)
+course-materials/exercise-data/map-qa/data/   cache, pobrane zdjęcia, rozszerzenia DuckDB `.duckdb_extensions/` (ignorowane przez Git)
 ```
 
 Polecenia uruchamiamy z katalogu głównego repozytorium: `uv run --project app mapqa ...`. Ścieżki względne w konfiguracji są rozwiązywane względem katalogu roboczego procesu, nie względem `app/`.
@@ -107,10 +106,11 @@ Polecenia uruchamiamy z katalogu głównego repozytorium: `uv run --project app 
 | Warstwa | Technologia | Uzasadnienie |
 |---|---|---|
 | Runtime | Python 3.12 + uv | Wymóg PRD §6; uv działa natywnie na Windows bez conda/WSL. |
-| CLI | Typer | Podpolecenia, typowane opcje, generowany `--help`; mała zależność na Click. |
+| CLI | argparse (stdlib) | Brak dodatkowej zależności; `main(argv) -> int` testowalne bez subprocess (D13). |
 | Konfiguracja | tomllib + Pydantic v2 | TOML z PRD F8.2; Pydantic waliduje i daje czytelne błędy z kodem wyjścia 1. |
-| Dane przestrzenne | GeoPandas + Shapely + pyproj | Dane mieszczą się w pamięci; łatwe testy jednostkowe na małych ramkach (D2). |
-| Dane tabelaryczne | pandas + pyarrow | Standard dla CSV/Parquet, wymagany przez GeoPandas. |
+| Obliczenia przestrzenne i tabelaryczne | DuckDB 1.5.6 + `spatial` (in-process) | Natywny odczyt GeoParquet i zagnieżdżonych struktur Overture, `ST_Transform` z `always_xy`, jeden SQL dla obu źródeł (D2). |
+| Wymiana danych | pyarrow 23.0.1 | Arrow między DuckDB a Pythonem; bez pandas w runtime. |
+| Wyrocznie testowe | GeoPandas 1.2.0 + pyproj 3.8.0 (dev) | Niezależna kontrola dystansów, CRS i azymutów (tolerancja 0,01 m / 0,1°). |
 | Źródło zdalne | Databricks SQL Statement Execution API przez httpx; alternatywnie Databricks CLI | PRD F8.3; jeden klient HTTP dla całego projektu (D3). |
 | Modele | OpenRouter: Decisions API (poziom 1, porównawczy) i Chat Completions (poziom 2) przez httpx | PRD §3; brak niejawnych ponowień (D4). |
 | Cache | SQLite (stdlib) | Jeden plik, atomowe zapisy, brak zależności (D5). |
@@ -128,10 +128,10 @@ Kierunek zależności: **cli → pipeline → (rdzeń) → porty ← adaptery**.
 |---|---|---|---|
 | `cli` | Parsowanie poleceń, wybór formatu wyjścia, potwierdzenie płatnych wywołań (manifest, `y/N`, `--yes`, wykrycie TTY), mapowanie wyjątków domenowych na kody wyjścia | `config`, `pipeline`, `sources.registry`, `evaluation` | użytkownik, agent AI |
 | `config` | Precedencja źródła i ustawień, walidacja, rozwiązywanie nazw zmiennych sekretów | stdlib, Pydantic | `cli`, `pipeline` |
-| `contract` | Definicja `DataBundle` i schematów zbiorów, walidacja typów/CRS/NULL heading | pandas, GeoPandas | `sources`, `profile`, wszystkie kroki rdzenia |
-| `sources` | Port `SourceAdapter` + adaptery `files`, `databricks` | `contract`, httpx, subprocess | `pipeline`, `cli sources` |
+| `contract` | Definicja `DataBundle` (widoki w połączeniu DuckDB) i schematów zbiorów, walidacja typów/CRS/NULL heading | duckdb | `sources`, `profile`, wszystkie kroki rdzenia |
+| `sources` | Port `SourceAdapter` + adaptery `files`, `databricks`; rejestracja tabel w DuckDB | `contract`, duckdb, httpx, subprocess | `pipeline`, `cli sources` |
 | `profile` | Liczności, kompletność tagów z mianownikiem, odrzucone rekordy | `contract` | `pipeline`, `report` |
-| `matching` | Zdjęcie → droga, flagi połączenia | `contract`, GeoPandas, Shapely, pyproj | `pipeline` |
+| `matching` | Zdjęcie → droga, flagi połączenia (SQL DuckDB w EPSG:2180 + ranking w Pythonie) | `contract`, duckdb | `pipeline` |
 | `normalize` | Normalizacja wartości atrybutów z zachowaniem surowych | stdlib | `compare`, `candidates` |
 | `compare` | Wynik porównania OSM ↔ Overture | `normalize`, `contract` | `candidates` |
 | `questions` | Katalog pytań, dozwolone odpowiedzi, `prompt_version` | stdlib | `models`, `cascade`, `evaluation` |
@@ -140,7 +140,7 @@ Kierunek zależności: **cli → pipeline → (rdzeń) → porty ← adaptery**.
 | `budget` | Limity zapytań i kosztu, log JSONL | stdlib | `cascade` |
 | `cascade` | Orkiestracja poziomów, progi, ścieżka kaskady | `models`, `cache`, `budget`, `questions` | `pipeline`, `evaluation` |
 | `candidates` | Reguły F6.1, priorytet F6.3, powód po polsku, kolejka F6.5–F6.7 | `compare`, `normalize`, wynik kaskady, flagi | `pipeline`, `report` |
-| `evaluation` | Jedyny czytelnik etykiet (`reference_labels.csv`, `signs/labels.csv`), podział po `sequence`, metryki §7, kalibracja | `cascade`, `questions`, pandas | `cli eval`, `report` |
+| `evaluation` | Jedyny czytelnik etykiet (`reference_labels.csv`, `signs/labels.csv`), podział po `sequence`, metryki §7, kalibracja | `cascade`, `questions`, duckdb | `cli eval`, `report` |
 | `report` | Zapis plików wynikowych | Jinja2, Pillow, `profile`, `candidates`, `evaluation` | `pipeline` |
 | `pipeline` | Kolejność kroków F2→F7, tryb bez modelu (domyślny), manifest płatnego odczytu | wszystkie moduły rdzenia + porty | `cli` |
 
@@ -154,7 +154,7 @@ Opis koncepcyjny; dokładne pola zbiorów źródłowych — ADR-001 §4.
 |---|---|---|---|---|
 | `RunParams` | Parametry uruchomienia | `run_id` (str), `bbox` (4×float, WGS84), `attributes` (lista enum), `source_name` (str), `dataset` (`signs` \| `photos`), `model_reading` (bool, domyślnie `false`), `confirmation` (`interactive` \| `flag_yes` \| `cache_only` \| `declined` \| null), `limits` (`max_queries` int = 100, `max_images` int = 25, `max_usd` decimal = 1.00, `reserve_usd` per rola modelu; ADR-003 §3.6), `models` (per poziom: id, reasoning effort), `thresholds` (per poziom × model × atrybut, float 0–1; ADR-003 §3.5), `seed` (str) | 1 run → wiele wyników | `run.json` w katalogu runu |
 | `SourceDescriptor` | Metadane użytego źródła (F7.6) | `name`, `type`, `access`, `tables_or_paths` (lista), `read_started_at`/`read_finished_at` (UTC), `input_hashes` (ścieżka → `sha256` przed runem i po runie, wszystkie przeczytane pliki lokalne: dane, obrazy, etykiety), bez sekretów | 1 run → 1 źródło | `run.json`, raport |
-| `DataBundle` | Kontrakt danych z dowolnego źródła | zbiory `osm_roads`, `overture_segments`, `photos`, `photo_road_links`, `traffic_signs`, opcjonalnie `signs`, `sign_nearest_osm`; wszystkie geometrie EPSG:4326; **bez etykiet referencyjnych** (czyta je tylko `evaluation`, ADR-004 §3.10) | produkowany przez adapter | tylko w pamięci |
+| `DataBundle` | Kontrakt danych z dowolnego źródła (widoki o stałych nazwach w jednym połączeniu DuckDB in-process) | zbiory `osm_roads`, `overture_segments`, `photos`, `photo_road_links`, `traffic_signs`, opcjonalnie `signs`, `sign_nearest_osm`; wszystkie geometrie EPSG:4326; **bez etykiet referencyjnych** (czyta je tylko `evaluation`, ADR-004 §3.10) | produkowany przez adapter | tylko w pamięci procesu (DuckDB in-memory) |
 | `RejectedRecord` | Odrzucony rekord (F2.3) | `dataset`, `record_id`, `reason` (enum: `missing_file`, `hash_mismatch`, `missing_geometry`, `outside_bbox`, `invalid_value`), `detail` (str) | n → 1 run | profil, raport |
 | `PhotoRoadLink` | Połączenie zdjęcia z drogą | `photo_id`, `osm_way_id` (int \| null), `overture_id` (str \| null), `distance_m` (float), `heading_diff_deg` (float \| null, 0–90), `candidate_count` (int), `flags` (zbiór enum F3.3), `link_source` (`own` \| `provided`) | 1 zdjęcie → 0..1 link | w pamięci, raport |
 | `AttributeValue` | Wartość atrybutu z mapy | `raw` (str/struktura, bez zmian), `normalized` (float km/h, 0,01 \| `paved`/`unpaved`/`unknown_value` \| `yes`/`yes_conditional`/`no`/`unknown_value` \| null), `speed_source` (`explicit` \| `implicit` \| null; `implicit` dla `PL:*`, ADR-002 D-002-4), `status` (`ok`, `missing`, `not_comparable`), `note` (str) | per droga × atrybut × źródło | w pamięci, raport, CSV |
@@ -226,20 +226,23 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 - (-) Więcej warstw niż w prostym skrypcie; wymaga dyscypliny importów (test architektury).
 **Warunek rewizji:** Gdy narzędzie ma działać jako długotrwały serwis (MCP, dashboard) obsługujący równoległe żądania.
 
-### D2. GeoPandas + Shapely + pyproj zamiast DuckDB spatial w pipeline
+### D2. Silnik przestrzenny: DuckDB spatial zamiast GeoPandas
 **Status:** Accepted
-**Data:** 2026-11-03
-**Kontekst:** F3 wymaga dystansów w EPSG:2180, kandydatów w promieniu 25 m, lokalnego kierunku drogi i flag; dane to ~100 tys. dróg OSM, ~85 tys. segmentów Overture i 561 zdjęć (+119 znaków). Porównaliśmy dwa silniki.
-**Decyzja:** GeoPandas 1.2.0 (`to_crs`, `sindex.query` z `predicate="dwithin"`, `sjoin_nearest` z `max_distance`/`distance_col`), Shapely 2.2.0 (rzutowanie na linię, styczna), pyproj 3.8.0. DuckDB 2.0.0 nie jest zależnością runtime; pozostaje narzędziem do profilowania (`profile.sql` w materiałach) i ad-hoc analiz.
+**Data:** 2026-11-03, zmieniona 2026-11-12
+**Wersja poprzednia (2026-11-03) — Superseded:** „GeoPandas 1.2.0 + Shapely 2.2.0 + pyproj 3.8.0 w pipeline; DuckDB tylko narzędzie profilowe”. Powód zmiany: decyzja użytkownika 2026-11-12, zgodność z wersją referencyjną (prowadzący, ADR-000 D-01).
+**Kontekst:** Trzeba wczytać 99 768 dróg OSM z JSON `tags` i 85 405 segmentów Overture z zagnieżdżonymi listami struktur (`speed_limits`, `road_surface`, `sources`, `level_rules`), przeliczyć je do EPSG:2180, policzyć dystanse, profil kompletności i (od P1) własne dopasowanie. Ta sama logika ma działać na danych z Databricks.
+**Decyzja:** Główny silnik to DuckDB 1.5.6 + `spatial`, in-process. Odczyt GeoParquet/CSV, filtr bbox, agregaty profilu i operacje metryczne w SQL: `ST_Transform(geom, 'EPSG:4326', 'EPSG:2180', always_xy := true)`, `ST_Distance`/`ST_DWithin` wyłącznie na kolumnach z przyrostkiem `_2180`, `ST_LineLocatePoint`, `ST_LineInterpolatePoint`, `ST_LineSubstring` (styczna ±5 m). Ranking kandydatów, remisy i flagi (ADR-002 §3.2–3.3) liczy Python na małych wynikach zapytań (≤ kilkanaście kandydatów na zdjęcie). Azymut geodezyjny końców stycznej liczy funkcja w Pythonie (stdlib `math`). GeoPandas 1.2.0 i pyproj 3.8.0 są wyłącznie zależnościami testowymi — niezależną wyrocznią dystansu (tolerancja 0,01 m), osi i azymutu. Rozszerzenie `spatial` instalowane przy pierwszym uruchomieniu (wymaga internetu) do ignorowanego katalogu `course-materials/exercise-data/map-qa/data/.duckdb_extensions/`. Przyjęte za wersją referencyjną prowadzącego.
 **Odrzucone alternatywy:**
-- DuckDB spatial (`ST_Transform(..., always_xy := true)`, `ST_DWithin`): szybki dla dużych zbiorów i zapytań SQL, ale lokalny kierunek drogi, remisy i flagi wymagają logiki proceduralnej, której test jednostkowy w SQL jest trudniejszy; pułapka osi lat/lon dla EPSG:4326 bez `always_xy`; rozszerzenie spatial nie jest autoładowane i pierwsza instalacja wymaga internetu.
-- Shapely + pyproj bez GeoPandas: brak indeksu przestrzennego na ramkach i odczytu GeoParquet; więcej własnego kodu.
+- GeoPandas + Shapely + pyproj jako silnik główny (nasza wersja z 2026-11-03): zagnieżdżone listy Overture wymagają rozpakowywania w pandas, wszystko ładuje się do pamięci, a agregaty profilu trzeba liczyć drugi raz innym narzędziem.
+- Hybryda (DuckDB do odczytu, GeoPandas do łączenia): dwa modele CRS i dwie konwencje osi zwiększają ryzyko błędu, którego dotyczy kryterium 3 PRD.
 **Konsekwencje:**
-- (+) Testy na małych GeoDataFrame z ręcznie policzonymi oczekiwaniami; jeden język logiki.
-- (+) `to_crs` w GeoPandas używa kolejności osi x/y (lon/lat) dla GeoParquet.
-- (-) Całe zbiory w pamięci (~kilkaset MB); akceptowalne na maszynie 16 GB.
-- (-) Filtr bbox po stronie źródła `files` odbywa się po wczytaniu (ADR-001).
-**Warunek rewizji:** Gdy `--no-model` na pełnym bbox przekracza 2 min (PRD §6) albo dane rosną > 1 mln dróg.
+- (+) Odczyt kolumnowy i zapytania na strukturach zagnieżdżonych bez kopiowania; filtr bbox wykonywany przy odczycie także dla źródła `files`.
+- (+) `always_xy := true` usuwa dwuznaczność kolejności osi EPSG:4326; test-strażnik wykrywa jej brak.
+- (+) Mniej zależności runtime (bez pandas, GeoPandas, Shapely, pyproj).
+- (-) DuckDB ma własną kopię bazy PROJ; wynik może się różnić od pyproj w dalszych miejscach po przecinku — pokrywa to test-wyrocznia z tolerancją 0,01 m.
+- (-) Pierwsza instalacja `spatial` wymaga sieci (warunek wstępny, jak instalacja `uv`).
+- (-) Logika rankingu podzielona między SQL (kandydaci, dystanse, styczna) i Python (ranking, flagi); granicę opisuje ADR-002.
+**Warunek rewizji:** Potrzeba operacji niedostępnych w DuckDB spatial (np. map-matching sekwencji), dashboard wymagający GeoDataFrame albo run bez modelu na pełnym bbox > 2 min (PRD §6).
 
 ### D3. Databricks przez SQL Statement Execution API (httpx) i opcjonalnie CLI; bez SDK i MCP
 **Status:** Accepted
@@ -276,7 +279,7 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 **Decyzja:** Plik `course-materials/exercise-data/map-qa/data/cache/llm_cache.sqlite` (katalog ignorowany przez Git, F2.2), jedna tabela z kluczem złożonym; log kosztów `reports/map-qa/<run_id>/costs.jsonl`. Szczegóły ADR-003 §4.
 **Odrzucone alternatywy:**
 - Plik JSON per klucz: tysiące plików, brak atomowości na Windows, trudniejsze statystyki.
-- DuckDB jako cache: niepotrzebna zależność runtime (D2).
+- DuckDB jako cache: DuckDB jest już zależnością runtime (D2), ale plik bazy jest blokowany przez jeden proces, a cache SQLite (stdlib) daje prostsze atomowe zapisy i diagnostykę niezależną od wersji DuckDB.
 **Konsekwencje:**
 - (+) Atomowe zapisy, zapytania diagnostyczne SQL, zero zależności.
 - (-) Jeden proces pisze naraz (wystarcza przy sekwencyjnym pipeline).
@@ -378,6 +381,19 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 - (-) Dwukrotne hashowanie ~800 obrazów i ~25 MB danych (szacunek: kilka sekund, wliczone w limit 2 min PRD §6).
 **Warunek rewizji:** Gdy źródłem będą wyłącznie dane zdalne bez plików lokalnych albo hashowanie przekroczy 10% czasu runu.
 
+### D13. CLI na argparse zamiast Typer
+**Status:** Accepted
+**Data:** 2026-11-12
+**Kontekst:** Wersja z 2026-11-03 wymieniała Typer 0.27.3 w stosie technologicznym (bez osobnej decyzji). CLI ma kilka poleceń (`run`, `sources list/check`, `eval run/calibrate`) i kilkanaście opcji. Wersja referencyjna prowadzącego (ADR-004 D-41) używa argparse.
+**Decyzja:** argparse ze stdlib Pythona 3.12, podpolecenia przez `add_subparsers`, funkcja `main(argv) -> int` zwracająca kod wyjścia (testowalna bez subprocess). Typer — Superseded: decyzja użytkownika 2026-11-12, zgodność z wersją referencyjną.
+**Odrzucone alternatywy:**
+- Typer (nasza wersja z 2026-11-03): dodatkowa zależność (Typer + Click) bez potrzeby przy tak małym CLI.
+- Click: jak wyżej.
+**Konsekwencje:**
+- (+) Zero dodatkowych zależności; pełna kontrola nad kodami wyjścia i kopertą JSON.
+- (-) `--help` i walidację typów opcji piszemy ręcznie (np. parser bbox).
+**Warunek rewizji:** Więcej niż 8 poleceń albo potrzeba interaktywnych, wieloetapowych promptów.
+
 ---
 
 ## 9. Diagramy
@@ -386,7 +402,7 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 
 ```mermaid
 flowchart LR
-  user["Analityk / agent AI"] --> cli["cli (Typer)"]
+  user["Analityk / agent AI"] --> cli["cli (argparse)"]
   cli --> config["config (TOML + env + flagi)"]
   cli --> pipeline["pipeline"]
   cli --> evalcmd["evaluation"]
@@ -399,6 +415,9 @@ flowchart LR
   dbcli --> bundle
   pipeline --> profile["profile"]
   pipeline --> matching["matching"]
+  files --> duck[("DuckDB in-process + spatial")]
+  dbrest --> duck
+  matching --> duck
   pipeline --> compare["compare + normalize"]
   pipeline --> cascade["cascade"]
   cascade --> questions["questions"]
@@ -518,9 +537,9 @@ TDD zgodnie z AGENTS.md: test przed kodem, potwierdzony czerwony wynik z oczekiw
 
 | Warstwa | Typ | Zakres | Narzędzia |
 |---|---|---|---|
-| Unit | Logika czysta | normalizacja, bbox, precedencja konfiguracji, flagi, reguły kandydatów, priorytety, id kolejki, metryki, podział po sequence, budżet, klucz cache, parsowanie odpowiedzi | pytest, małe GeoDataFrame, `tmp_path` |
+| Unit | Logika czysta | normalizacja, bbox, precedencja konfiguracji, flagi, reguły kandydatów, priorytety, id kolejki, metryki, podział po sequence, budżet, klucz cache, parsowanie odpowiedzi | pytest, małe tabele DuckDB in-memory, `tmp_path` |
 | Contract | Adaptery źródeł | ten sam zestaw testów dla `files` i `databricks` (nagranie) | pytest parametryzowany po adapterze |
-| Integration | Brzegi HTTP | OpenRouter Decisions/Chat, Databricks REST — przez respx z nagrań; SQLite cache na dysku tymczasowym | pytest, respx |
+| Integration | Brzegi HTTP i SQL | OpenRouter Decisions/Chat, Databricks REST — przez respx z nagrań; SQLite cache na dysku tymczasowym; zapytania DuckDB na prawdziwych wierszach danych kursu z wyrocznią GeoPandas/pyproj (dystans 0,01 m) | pytest, respx, geopandas/pyproj (dev) |
 | E2E | Prawdziwy stos | `uv run --project app mapqa run --no-model` na plikach; jedno płatne uruchomienie z limitem | subprocess, pytest marker `e2e`, `paid` |
 | Manual QA | CLI | odczyt `report.md`, `manual_queue.csv`, `--output json` | terminal |
 
@@ -554,5 +573,6 @@ Szczegółowe tabele scenariuszy są w ADR 001–004. Scenariusze przekrojowe:
 - TAC-10: Wszystkie progi, limity i modele z PRD mają domyślne wartości w `mapqa.example.toml` i są nadpisywalne flagą CLI (test parametryzowany).
 - TAC-11: Raport, CSV i komunikaty dla człowieka są po polsku; identyfikatory i nazwy pól w oryginale (test snapshot sekcji raportu).
 - TAC-13: Run bez `--model` nie tworzy klienta OpenRouter (0 żądań, brak wymaganego `OPENROUTER_API_KEY`); run z `--model` bez TTY i bez `--yes` kończy się kodem 1 przed pierwszym żądaniem (test z respx zliczającym trasy).
+- TAC-15: Żadne zapytanie `.sql` ani SQL w kodzie nie wywołuje `ST_Distance`/`ST_DWithin` na kolumnie bez przyrostka `_2180`, a każde `ST_Transform` z EPSG:4326 ma `always_xy := true` (test statyczny); GeoPandas, Shapely, pyproj i pandas nie są importowane w `app/src/` (tylko w `app/tests/`).
 - TAC-12: Test architektury: moduły rdzenia (`matching`, `normalize`, `compare`, `cascade`, `candidates`, `evaluation`) nie importują `httpx`, `sources.databricks_*` ani `cli`. Żaden moduł poza `evaluation` nie importuje `evaluation.labels` ani nie zawiera ciągów `reference_labels.csv` / `labels.csv` (ADR-004 TAC-004-07).
 - TAC-14: `run.json` zawiera `sha256` każdego przeczytanego pliku wejściowego przed i po runie; zmiana pliku w trakcie runu daje kod 4.
