@@ -96,7 +96,7 @@ Sekcje `report.md` w tej kolejności (nagłówki po polsku):
 8. **Koszt** — całkowity, per poziom, na zapytanie, na kandydata; liczba trafień cache; oznaczenie kosztów szacowanych; zużycie limitów (`queries_used`/`max_queries`, `images_used`/`max_images`, USD); przy otwartym bezpieczniku podsekcja „Odczyt przerwany: błąd API” z kodem błędu i liczbą pytań `circuit_open`.
 9. **Licencje i atrybucja** — OSM i Overture: ODbL 1.0; zdjęcia: CC BY-SA 4.0 z autorem i linkiem przy każdej miniaturze; tekst zgodny z `ATTRIBUTION.md`; zastrzeżenie: „Kandydat nie oznacza błędu mapy; decyzję podejmuje człowiek.”
 
-`report.html` [P4] — te same sekcje z tego samego modelu widoku, samodzielny plik (CSS w `<style>`, miniatury osadzone jako `data:image/jpeg;base64`), bez zewnętrznych zasobów i skryptów.
+`report.html` [P4] — te same sekcje z tego samego modelu widoku, CSS w `<style>`, bez skryptów i zewnętrznych zasobów. Miniatury przez **ścieżkę względną** `<img src="thumbs/<photo_sha256>.jpg">` do katalogu runu; obrazów **nie osadzamy** jako base64 (decyzja użytkownika 2026-11-12, przyjęte za wersją referencyjną prowadzącego, ADR-004 §3.5). Samodzielną jednostką jest katalog runu (`report.html` + `thumbs/`), nie pojedynczy plik. Gdy miniatury brak (brak pliku źródłowego albo `image_status ≠ ok`), wiersz pokazuje tekst „Miniatura niedostępna” i link do źródła zdjęcia z `source_url`; atrybucja pozostaje. Linki zewnętrzne tylko `https` z `rel="noopener noreferrer"`.
 
 Determinizm: poza `run_id` i czasami w sekcji 1 raport nie zawiera znaczników czasu; kolejność wszystkich tabel jest jawnie posortowana.
 
@@ -162,16 +162,18 @@ Przyjęte za wersją referencyjną prowadzącego (ADR-003 §3, TAC-003-03): **ty
 
 ## 6. Decyzje techniczne
 
-### D-004-1. Miniatury kopiowane do katalogu runu
+### D-004-1. Miniatury kopiowane do katalogu runu, w MD i HTML przez ścieżkę względną
 **Status:** Accepted
-**Data:** 2026-11-03
-**Kontekst:** F7.3 wymaga miniatur z atrybucją; raport ma być przenośny, a ścieżki względne do `course-materials/` psują się po przeniesieniu katalogu.
-**Decyzja:** Miniatury 320 px w `thumbs/` (MD linkuje względnie), w HTML osadzone base64. Atrybucja przy każdej miniaturze (CC BY-SA 4.0 wymaga uznania autorstwa i tej samej licencji dla utworu zależnego).
+**Data:** 2026-11-03, zmieniona 2026-11-12
+**Kontekst:** F7.3 wymaga miniatur z atrybucją; raport ma być przenośny, a ścieżki względne do `course-materials/` psują się po przeniesieniu katalogu. Wersja z 2026-11-03 osadzała miniatury w HTML jako base64 — Superseded: decyzja użytkownika 2026-11-12, zgodność z wersją referencyjną (prowadzący, ADR-004 §3.5: „Obrazów nie osadzamy jako base64”).
+**Decyzja:** Miniatury 320 px w `thumbs/` katalogu runu; `report.md` i `report.html` linkują je **ścieżką względną** (`thumbs/<photo_sha256>.jpg`), bez base64. Brak miniatury → „Miniatura niedostępna” + link do źródła. Atrybucja przy każdej miniaturze (CC BY-SA 4.0 wymaga uznania autorstwa i tej samej licencji dla utworu zależnego).
 **Odrzucone alternatywy:**
-- Link do oryginału w `course-materials/`: raport nie działa poza repozytorium.
+- Link do oryginału w `course-materials/` (wariant prowadzącego): raport nie działa po przeniesieniu katalogu runu; kopia 320 px w `thumbs/` zachowuje przenośność katalogu.
+- Osadzanie base64 w HTML (nasza wersja z 2026-11-03): duży plik HTML, base64 w artefaktach utrudnia skan wycieków i przegląd diffów.
 - Pełne zdjęcia w raporcie: rozmiar.
 **Konsekwencje:**
-- (+) Samodzielny raport.
+- (+) Mały `report.html`, ten sam mechanizm w MD i HTML; katalog runu przenośny jako całość.
+- (-) `report.html` skopiowany bez `thumbs/` traci miniatury (pokazuje tekst alternatywny i atrybucję).
 - (-) Katalog runu rośnie (~20 kB × liczba pozycji).
 **Warunek rewizji:** Gdy raporty będą publikowane poza repozytorium (wymagana weryfikacja licencji dystrybucji).
 
@@ -289,8 +291,8 @@ sequenceDiagram
 | QUE-02 stabilne id | Unit | dwa runy, inna kolejność wejścia | identyczne `item_id` i kolejność (kryterium 14) | zmiana `run_id` |
 | QUE-03 kolumny | Unit | dowolna kolejka | nagłówek dokładnie §3.4, BOM, 3 puste kolumny decyzji (F6.6) | polskie znaki w powodzie, przecinek w autorze |
 | RPT-01 sekcje | Unit (snapshot) | `ReportViewModel` z fixture | `report.md` ma sekcje §3.6 w kolejności, teksty po polsku | 0 kandydatów → komunikat „Brak kandydatów” |
-| RPT-02 wiersz kandydata | Unit | kandydat z eskalacją | miniatura, atrybucja, wartości, odczyt z p, poziom, odpowiedź poziomu 1, flagi, powód (kryterium 10) | brak pliku miniatury → tekst „brak miniatury” |
-| RPT-03 HTML samodzielny | Unit [P4] | jak RPT-01 | brak odwołań `http(s)://` w `src`/`href` zasobów, miniatury jako `data:` | autoescape `<` w autorze |
+| RPT-02 wiersz kandydata | Unit | kandydat z eskalacją | miniatura, atrybucja, wartości, odczyt z p, poziom, odpowiedź poziomu 1, flagi, powód (kryterium 10) | brak pliku miniatury → tekst „Miniatura niedostępna” + link `source_url` |
+| RPT-03 HTML i miniatury | Unit [P4] | jak RPT-01, kandydat z miniaturą i kandydat bez pliku | brak `<script` i odwołań `http(s)://` w `src` zasobów; każdy `<img src>` względny (`thumbs/…`) i wskazuje istniejący plik; brak `data:` i base64 w HTML; placeholder „Miniatura niedostępna” dla brakującej | autoescape `<` w autorze; link `javascript:` odrzucony |
 | RPT-04 licencje | Unit | dowolny run | sekcja licencji z ODbL i CC BY-SA (F7.5) | — |
 | INP-01 zmiana wejścia | Integration | plik obrazu zmieniony po odczycie (hook testowy) | raport zapisany z ostrzeżeniem, `ok=false`, `input_modified`, kod 4 | brak zmian → kod 0 |
 | ISO-03 izolacja etykiet | Unit (architektura) | kod `app/src/mapqa/` | tylko `evaluation/` importuje `evaluation.labels` i zawiera nazwy plików etykiet; `DataBundle` nie ma pól etykiet | próba otwarcia `labels.csv` z innego modułu (monkeypatch `open`) → błąd testu |
@@ -306,7 +308,7 @@ sequenceDiagram
 
 - TAC-004-01: Dwa runy na tych samych danych i ciepłym cache dają bajtowo identyczne `manual_queue.csv` i `evaluation.json`.
 - TAC-004-02: Każda pozycja kolejki ma niepusty `powod` po polsku i wszystkie kolumny F6.6.
-- TAC-004-03: `report.md` przechodzi kontrolę linków względnych (każdy `thumbs/...` istnieje).
+- TAC-004-03: `report.md` i `report.html` przechodzą kontrolę linków względnych (każdy `thumbs/...` istnieje); `report.html` nie zawiera `data:image` ani fragmentu base64 dłuższego niż 64 znaki.
 - TAC-004-04: `evaluation.json` waliduje się modelem Pydantic; każda metryka ma `numerator` i `denominator`.
 - TAC-004-05: Żadna sekwencja nie występuje jednocześnie w `calibration` i `test` (test na danych kursu).
 - TAC-004-06: `reports/` jest w `.gitignore` (`git check-ignore reports/map-qa/x/report.md` zwraca 0).

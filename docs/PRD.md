@@ -150,7 +150,7 @@ poziom 3: człowiek ──► kolejka ręcznej weryfikacji (F6)
 
 ### F7. Raport
 
-- F7.1 Pliki: `report.md`, `report.html` (samodzielny HTML, miniatury osadzone lub z odnośnikiem względnym) i `manual_queue.csv`.
+- F7.1 Pliki: `report.md`, `report.html` (statyczny HTML bez skryptów i zasobów zewnętrznych; miniatury z odnośnikiem względnym do katalogu `thumbs/` w katalogu uruchomienia, bez osadzania base64 — przyjęte za wersją referencyjną prowadzącego) i `manual_queue.csv`. Brak miniatury → „Miniatura niedostępna” i link do źródła zdjęcia.
 - F7.2 Sekcje: parametry uruchomienia, profil danych, **lejek kaskady** (pytania ogółem → rozstrzygnięte na poziomie 1 → eskalowane i rozstrzygnięte na poziomie 2 → przekazane człowiekowi, z liczbami i odsetkami), podsumowanie (kandydaci wg atrybutu i priorytetu, `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds`), kolejka ręcznej weryfikacji, metryki ewaluacji (jeśli dostępne etykiety), koszt osobno dla każdego poziomu.
 - F7.3 Wiersz kandydata: identyfikator drogi (OSM way + Overture id), **miniatura zdjęcia z atrybucją** (autor, licencja, link do źródła, CC BY-SA 4.0), data zdjęcia, wartości OSM/Overture (surowe i znormalizowane), odczyt z prawdopodobieństwem i poziomem, który go rozstrzygnął (przy eskalacji także odpowiedź poziomu 1), flagi połączenia, powód skierowania.
 - F7.4 Teksty raportu po polsku; identyfikatory i nazwy pól w oryginale.

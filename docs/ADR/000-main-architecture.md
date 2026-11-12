@@ -114,7 +114,7 @@ Polecenia uruchamiamy z katalogu głównego repozytorium: `uv run --project app 
 | Źródło zdalne | Databricks SQL Statement Execution API przez httpx; alternatywnie Databricks CLI | PRD F8.3; jeden klient HTTP dla całego projektu (D3). |
 | Modele | OpenRouter: Decisions API (poziom 1, porównawczy) i Chat Completions (poziom 2) przez httpx | PRD §3; brak niejawnych ponowień (D4). |
 | Cache | SQLite (stdlib) | Jeden plik, atomowe zapisy, brak zależności (D5). |
-| Raport | Jinja2 + Pillow | Szablony oddzielone od logiki; miniatury w HTML (D6). |
+| Raport | Jinja2 + Pillow | Szablony oddzielone od logiki; miniatury w `thumbs/` przez ścieżkę względną, bez base64 (D6). |
 | Testy | pytest + respx | TDD; mocki z nagranych odpowiedzi (AGENTS.md). |
 | UI (poza v1) | Streamlit — rekomendacja na później | D7, status Proposed. |
 
@@ -288,8 +288,8 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 ### D6. Raport z szablonów Jinja2
 **Status:** Accepted
 **Data:** 2026-11-03
-**Kontekst:** F7 wymaga `report.md` [MVP] i samodzielnego `report.html` z miniaturami [P4], z tekstami po polsku i stałą strukturą sekcji.
-**Decyzja:** Jinja2 3.1.6, szablony w `report/templates/`, autoescape włączony dla HTML; logika (liczenie, sortowanie) w Pythonie, szablon tylko formatuje. Miniatury przez Pillow, osadzone base64 (ADR-004).
+**Kontekst:** F7 wymaga `report.md` [MVP] i `report.html` z miniaturami [P4] (katalog runu jako samodzielna całość), z tekstami po polsku i stałą strukturą sekcji.
+**Decyzja:** Jinja2 3.1.6, szablony w `report/templates/`, autoescape włączony dla HTML; logika (liczenie, sortowanie) w Pythonie, szablon tylko formatuje. Miniatury przez Pillow, zapisane w `thumbs/` i linkowane ścieżką względną, bez base64 (ADR-004 D-004-1, zmienione 2026-11-12).
 **Odrzucone alternatywy:**
 - Czysty Python (f-stringi): miesza logikę z prezentacją, trudny przegląd treści po polsku, brak autoescape w HTML.
 - Generator raportów (np. Quarto, Datapane): dodatkowe środowisko uruchomieniowe, poza wymaganiami.
