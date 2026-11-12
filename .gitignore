@@ -19,6 +19,7 @@ __pycache__/
 **/target/
 *.class
 /.idea
+/.claude/worktrees
 
 # Generated map QA run outputs (reports, thumbnails, cost logs)
 /reports/
