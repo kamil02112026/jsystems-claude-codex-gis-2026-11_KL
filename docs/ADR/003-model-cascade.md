@@ -63,7 +63,7 @@ Przygotowanie musi spełnić wymagania obrazów Jev (`typesafe/jev-1.14`, model 
 Kroki (`ImagePreparer`, Pillow 12.0.0):
 1. Wejście: plik obrazu z `DataBundle` (wycinek `signs/crops/` albo pełny kadr). Format inny niż PNG/JPEG → `image_out_of_bounds` (bez konwersji formatu).
 2. `ImageOps.exif_transpose` — fizyczny obrót według orientacji EXIF (Jev ignoruje znacznik orientacji).
-3. Skalowanie z zachowaniem proporcji, filtr `LANCZOS`: gdy krótszy bok < 256 px — powiększenie do 256 px (małe wycinki znaków); gdy dłuższy bok > 1568 px — zmniejszenie do 1568 px.
+3. Skalowanie z zachowaniem proporcji, filtr `LANCZOS`: gdy krótszy bok < 256 px **albo** liczba pikseli < 78 400 — powiększenie współczynnikiem `max(256 / krótszy bok, √(78 400 / pikseli))` (zaokrąglenie w górę), aby spełnić oba minima naraz; gdy dłuższy bok > 1568 px — zmniejszenie do 1568 px. (Poprawka 2026-11-12: samo powiększenie krótszego boku do 256 px dawało dla kwadratowych wycinków 256×256 = 65 536 px < 78 400 i odrzucało 105 ze 119 wycinków kursu.)
 4. Kontrola po skalowaniu: każdy bok w 256–1568 px, liczba pikseli w 78 400–2 458 624. Niespełnienie (np. skrajne proporcje wycinka, przy których powiększenie krótszego boku wypycha dłuższy ponad 1568 px) → obraz odrzucony ze statusem `image_out_of_bounds`; żadne zapytanie nie jest wysyłane.
 5. Zapis JPEG, jakość 92, bez EXIF i innych metadanych (usuwa też ewentualne GPS). Wynik > 16 MiB → `image_out_of_bounds`.
 
