@@ -94,6 +94,10 @@ Verify only the scope relevant to your change. If the change affects runtime beh
 
 **Env Vars:** No model API key is required for the synthetic GIS starter, PRD or normal Claude Code/Codex CLI use on the provided accounts. `.env.example` contains optional settings for an explicitly selected API exercise; `OPENROUTER_API_KEY` is needed only when that exercise actually calls OpenRouter.
 
+### Map QA data profile
+- Refresh the input data profile with `uv run course-materials/exercise-data/map-qa/profile_data.py` (read-only DuckDB queries from `profile.sql`, ~1 min) instead of writing ad-hoc profiling queries.
+- The curated summary lives in `reports/map-qa/profile.md` (committed); other files under `reports/` are generated and git-ignored. Update the profile when input data or `profile.sql` changes, and check PRD/ADR assumptions against it.
+
 ### Commit Rules
 - Never commit directly to `main`; work on a feature branch and open a PR. If the current branch is `main`, create a feature branch before the first commit.
 - Commit only after verification passes and the changed scope is in a working state.
