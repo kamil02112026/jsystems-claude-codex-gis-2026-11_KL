@@ -85,7 +85,7 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
 ### F2. Wczytanie i profil danych
 
 - F2.1 Wczytuje drogi OSM, segmenty Overture, manifest zdjęć (`photos.csv`, opcjonalnie `signs/signs.csv`) i dostępne pliki zdjęć.
-- F2.2 Pliki wejściowe są tylko do odczytu; wyniki trafiają do `reports/map-qa/<run_id>/`, cache do `course-materials/exercise-data/map-qa/data/` (ignorowane przez Git).
+- F2.2 Pliki wejściowe są tylko do odczytu; system liczy `sha256` każdego przeczytanego pliku przed i po uruchomieniu, a zmiana w trakcie kończy uruchomienie kodem `4` z listą zmienionych plików (przyjęte za wersją referencyjną prowadzącego); wyniki trafiają do `reports/map-qa/<run_id>/`, cache do `course-materials/exercise-data/map-qa/data/` (ignorowane przez Git).
 - F2.3 Profil zawiera: liczbę rekordów na źródło, liczbę rekordów w bbox, kompletność tagów (`maxspeed`, `surface`, `lit`) w procentach z mianownikiem oraz **odrzucone rekordy z przyczyną** (np. brak pliku zdjęcia, niezgodny hash, brak geometrii, poza bbox).
 - F2.4 `heading = 0.0` to poprawny kierunek północny; brak kierunku to wartość pusta/NULL i nigdy nie jest zamieniany na 0.
 - F2.5 Liczności z plików i Databricks dla tego samego snapshotu są zgodne; rozbieżność jest raportowana jako ostrzeżenie.
@@ -94,7 +94,7 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
 
 - F3.1 Odległości liczone w metrach w **EPSG:2180**; obie warstwy przeliczane z EPSG:4326/OGC:CRS84.
 - F3.2 Kandydaci w promieniu 25 m; ranking uwzględnia dystans i zgodność kierunku kamery z lokalnym kierunkiem drogi (oba kierunki geometrii).
-- F3.3 Niepewne połączenia są **oznaczone, nie ukryte**. Flagi co najmniej: `ambiguous_candidates` (druga droga w zbliżonym wyniku), `junction_nearby`, `service_way`, `missing_heading`, `panorama_heading_ambiguous`, `poor_heading_alignment`, `no_osm_within_25m`.
+- F3.3 Niepewne połączenia są **oznaczone, nie ukryte**. Flagi co najmniej: `ambiguous_candidates` (druga droga w zbliżonym wyniku), `junction_nearby`, `service_way`, `missing_heading`, `panorama_heading_ambiguous`, `poor_heading_alignment`, `no_osm_within_25m`; od przyrostu 1 także `grade_separated` (most, tunel, `layer`, `level_rules`), `service_or_restricted` (droga serwisowa lub `access`/`motor_vehicle` = `private`/`no`/`destination`) i `distance_mismatch` (dostarczony dystans różni się od przeliczonego w EPSG:2180 o > 0,5 m).
 - F3.4 Brak dopasowania jest stanem danych, nie dowodem błędu mapy, i nie tworzy kandydata rozbieżności.
 - F3.5 Wynik własnego dopasowania jest porównany z `photo_road_links.csv`; odsetek zgodnych `osm_way_id` trafia do profilu (punkt odniesienia, nie wzorzec).
 
@@ -198,7 +198,7 @@ Cel: analityk **albo agent AI korzystający z narzędzia** może wskazać, skąd
   - `mapqa sources check [--source X]` — test połączenia i liczności tabel w bbox;
   - `--output json` dla wszystkich poleceń — wynik maszynowy dla agenta;
   - `--model --yes` — jawne włączenie płatnego odczytu i potwierdzenie bez interakcji (F1.4); bez `--model` agent nigdy nie wywołuje płatnego API;
-  - stałe kody wyjścia: `0` sukces, `1` błąd danych lub walidacji, `2` źródło niedostępne lub brak uprawnień, `3` uruchomienie zakończone z raportem, ale odczyt modelem niepełny (przekroczony budżet modelu albo przerwanie po błędzie API).
+  - stałe kody wyjścia: `0` sukces, `1` błąd danych lub walidacji, `2` źródło niedostępne lub brak uprawnień, `3` uruchomienie zakończone z raportem, ale odczyt modelem niepełny (przekroczony budżet modelu albo przerwanie po błędzie API), `4` pliki wejściowe zmieniły się w trakcie uruchomienia.
 - F8.10 Wynik `--no-model` z tych samych danych jest identyczny dla źródeł `files` i `databricks` (te same kandydaci rozbieżności i liczności), z wyjątkiem pól metadanych źródła.
 
 ## 6. Wymagania niefunkcjonalne
@@ -210,7 +210,7 @@ Cel: analityk **albo agent AI korzystający z narzędzia** może wskazać, skąd
 
 ## 7. Ewaluacja odczytu modelu
 
-Etykiety referencyjne są **roboczą referencją, nie prawdą terenową** (przygotowane przez agenta AI i drugi model).
+Etykiety referencyjne są **roboczą referencją, nie prawdą terenową** (przygotowane przez agenta AI i drugi model). Czyta je wyłącznie moduł ewaluacji; nie trafiają do kaskady, reguł kandydatów ani do modelu.
 
 ### Zasady
 

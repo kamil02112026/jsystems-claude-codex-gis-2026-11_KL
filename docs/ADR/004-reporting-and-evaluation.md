@@ -79,7 +79,7 @@ Liczby z przecinkiem dziesiętnym (format polski), dwa miejsca po przecinku dla 
 
 `reports/map-qa/<run_id>/` (ignorowany przez Git — `.gitignore` dostaje wpis `reports/`):
 - `run_id` = `YYYYMMDDTHHMMSSZ-<6 hex>` (UTC + skrót `sha256` parametrów `RunParams` bez `run_id`).
-- `run.json` — `RunParams`, `SourceDescriptor`, wersje narzędzia i bibliotek, podsumowanie (koperta `result` z ADR-000 §6).
+- `run.json` — `RunParams`, `SourceDescriptor` (z `input_hashes` przed i po runie), wersje narzędzia i bibliotek, podsumowanie (koperta `result` z ADR-000 §6). Przy kodzie 4 (`input_modified`, ADR-000 D12) `run.json` i nagłówek `report.md` zawierają ostrzeżenie „Dane wejściowe zmieniły się w trakcie uruchomienia — wyniki niewiarygodne” z listą ścieżek.
 - `report.md` [MVP], `report.html` [P4], `manual_queue.csv`, `evaluation.json` (gdy są etykiety), `costs.jsonl`, `thumbs/<photo_sha256>.jpg` (miniatury 320 px dłuższego boku, JPEG jakość 80).
 
 ### 3.6 Raport (F7)
@@ -131,6 +131,10 @@ Każda metryka w `evaluation.json` ma `numerator`, `denominator`, `value` (null 
 
 ---
 
+### 3.10 Izolacja etykiet referencyjnych
+
+Przyjęte za wersją referencyjną prowadzącego (ADR-003 §3, TAC-003-03): **tylko** moduł `evaluation` (komponent `Evaluator`, podmoduł `evaluation.labels`) czyta `reference_labels.csv` i `signs/labels.csv`. Etykiety nie są częścią `DataBundle` (ADR-001 §4), więc nie mogą trafić do kaskady, reguł kandydatów, kolejki ani żądań do modeli. `Evaluator` dostaje gotowe `CascadeResult` i zwraca `EvaluationReport`; wynik trafia do `ReportViewModel`, nigdy w odwrotnym kierunku. Sekcja raportu „Rozbieżności znak ↔ OSM (MVP)” korzysta z wyniku `Evaluator`, nie z etykiet bezpośrednio. Pusta etykieta nie jest zamieniana na `no` ani `none`.
+
 ## 4. Struktury danych
 
 - `Candidate`, `QueueItem`, `EvaluationReport` — ADR-000 §5.
@@ -147,6 +151,8 @@ Każda metryka w `evaluation.json` ma `numerator`, `denominator`, `value` (null 
 | `build_candidates` | linki, wartości mapy, wyniki kaskady | lista `Candidate` | — |
 | `build_queue` | kandydaci, nierozstrzygnięte wyniki | posortowana lista `QueueItem` | — |
 | `write_run_outputs` | `ReportViewModel`, kolejka, ewaluacja | ścieżki plików | `OSError` → kod 1, komunikat ze ścieżką |
+| `verify_inputs_unchanged` | `input_hashes` sprzed runu | lista zmienionych ścieżek (pusta = OK) | niepusta → `InputModified`, kod 4 (ADR-000 §6) |
+| `evaluation.labels.load` | `labels_path` | etykiety `certain`/`uncertain` | jedyny czytelnik plików etykiet (§3.10) |
 | `split_by_sequence` | lista (`photo_id`, `sequence`), `seed` | mapa `photo_id` → `calibration`/`test` | sekwencja pusta → `ContractViolation` |
 | `evaluate` | wyniki kaskady, etykiety, podział | `EvaluationReport` | — |
 | `calibrate` | wyniki kaskady (calibration), `target_accuracy`, siatka | progi + pasma | — |
@@ -285,6 +291,8 @@ sequenceDiagram
 | RPT-02 wiersz kandydata | Unit | kandydat z eskalacją | miniatura, atrybucja, wartości, odczyt z p, poziom, odpowiedź poziomu 1, flagi, powód (kryterium 10) | brak pliku miniatury → tekst „brak miniatury” |
 | RPT-03 HTML samodzielny | Unit [P4] | jak RPT-01 | brak odwołań `http(s)://` w `src`/`href` zasobów, miniatury jako `data:` | autoescape `<` w autorze |
 | RPT-04 licencje | Unit | dowolny run | sekcja licencji z ODbL i CC BY-SA (F7.5) | — |
+| INP-01 zmiana wejścia | Integration | plik obrazu zmieniony po odczycie (hook testowy) | raport zapisany z ostrzeżeniem, `ok=false`, `input_modified`, kod 4 | brak zmian → kod 0 |
+| ISO-03 izolacja etykiet | Unit (architektura) | kod `app/src/mapqa/` | tylko `evaluation/` importuje `evaluation.labels` i zawiera nazwy plików etykiet; `DataBundle` nie ma pól etykiet | próba otwarcia `labels.csv` z innego modułu (monkeypatch `open`) → błąd testu |
 | EVL-01 podział | Unit | 103 sekwencje `signs` | deterministyczny podział, żadna sekwencja w obu częściach | zmiana seed → inny podział |
 | EVL-02 mianowniki | Unit | wyniki z abstencjami i `uncertain` | metryki §3.8 z poprawnymi licznikami; `uncertain` wykluczone i policzone (kryterium 11) | mianownik 0 → `value = null` |
 | EVL-03 baseline Mapillary | Unit | `mapillary_value` z `signs.csv` | wartość liczbowa z nazwy klasy | brak detekcji |
@@ -301,3 +309,5 @@ sequenceDiagram
 - TAC-004-04: `evaluation.json` waliduje się modelem Pydantic; każda metryka ma `numerator` i `denominator`.
 - TAC-004-05: Żadna sekwencja nie występuje jednocześnie w `calibration` i `test` (test na danych kursu).
 - TAC-004-06: `reports/` jest w `.gitignore` (`git check-ignore reports/map-qa/x/report.md` zwraca 0).
+- TAC-004-07: Żaden moduł poza `evaluation` nie importuje `evaluation.labels` ani nie otwiera `reference_labels.csv` / `signs/labels.csv` (test importów i ścieżek w `tests/unit/test_architecture.py`).
+- TAC-004-08: Run z plikiem wejściowym zmienionym w trakcie kończy się kodem 4, a `run.json` zawiera hashe przed i po.

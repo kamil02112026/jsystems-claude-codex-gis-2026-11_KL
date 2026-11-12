@@ -65,12 +65,17 @@ Zbiór flag jest zapisywany przy każdym połączeniu; żadna flaga nie usuwa zd
 | `no_osm_within_25m` | brak kandydatów | PRD |
 | `overture_spatial_only` | Overture dopasowane bez referencji do OSM | dane kursu |
 | `outside_standard_25m` | (tylko `signs/nearest_osm.csv`) dopasowanie dalej niż 25 m | dane kursu |
+| `grade_separated` [P1] | wybrana droga OSM ma `bridge` (≠ `no`), `tunnel` (≠ `no`) albo `layer` ≠ 0, albo segment Overture ma niepuste `level_rules`; kadr może pokazywać inny poziom drogi | wersja referencyjna prowadzącego (ADR-002 §3.4) |
+| `service_or_restricted` [P1] | `highway = service` albo `access` / `motor_vehicle` ∈ {`private`, `no`, `destination`} | wersja referencyjna prowadzącego (ADR-002 §3.4) |
+| `distance_mismatch` [P1] | (tylko `link_source = provided`) dystans aparat → wybrana droga OSM przeliczony w EPSG:2180 (`distance_m_recomputed`) różni się od dostarczonego `distance_m` o > 0,5 m | wersja referencyjna prowadzącego (ADR-002 §3.2) |
+
+Flagi `grade_separated`, `service_or_restricted` i `distance_mismatch` (przyjęte za wersją referencyjną prowadzącego) wymagają tagów i geometrii z `osm_roads`/`overture_segments`, więc są liczone od [P1]; w MVP (`signs/nearest_osm.csv` bez pełnych tagów i bez czytania GeoParquet) nie występują, a raport to zaznacza. `service_way` (wymagane przez PRD F3.3) pozostaje obok `service_or_restricted`. W przeciwieństwie do wersji referencyjnej flagi nie zmieniają połączenia w „niejednoznaczne”: obniżają tylko priorytet kandydata do `średni` (ADR-004 §3.2).
 
 „Czyste połączenie” dla priorytetu `wysoki` (F6.3, ADR-004) = zbiór flag pusty albo zawiera wyłącznie `boundary_crossing`.
 
 ### 3.4 Gotowe dopasowanie w MVP
 
-`ProvidedLinkMatcher` [MVP] mapuje `signs/nearest_osm.csv` (zestaw `signs`) i `photo_road_links.csv` (zestaw `photos`, przed P1) na `PhotoRoadLink` z `link_source = provided`; `match_flags`/`candidate_flags` rozdzielone po `;` trafiają do zbioru flag bez zmian. Od [P1] `OwnMatcher` liczy połączenia sam, a raport pokazuje odsetek zgodnych `osm_way_id` z `photo_road_links.csv` (z mianownikiem = zdjęcia z dopasowaniem w obu).
+`ProvidedLinkMatcher` [MVP] mapuje `signs/nearest_osm.csv` (zestaw `signs`) i `photo_road_links.csv` (zestaw `photos`, przed P1) na `PhotoRoadLink` z `link_source = provided`; `match_flags`/`candidate_flags` rozdzielone separatorem potwierdzonym testem `SELECT DISTINCT` (ADR-001 §3.7) trafiają do zbioru flag bez zmian. Od [P1] dla połączeń `provided` liczony jest też `distance_m_recomputed` w EPSG:2180 i flaga `distance_mismatch` (§3.3). Od [P1] `OwnMatcher` liczy połączenia sam, a raport pokazuje odsetek zgodnych `osm_way_id` z `photo_road_links.csv` (z mianownikiem = zdjęcia z dopasowaniem w obu).
 
 ### 3.5 Normalizacja wartości
 
@@ -142,7 +147,7 @@ Gdy którakolwiek strona ma `speed_source = implicit`, `ComparisonResult.implici
 
 ## 4. Struktury danych
 
-- `PhotoRoadLink` — ADR-000 §5; dodatkowo `rank` (float), `way_bearing` (float \| null), `directed_bearing_diff` (float \| null), `linear_position` (0–1 \| null, pozycja rzutu na segment Overture), `match_method` (`osm_source_reference`, `spatial_fallback`, `none`, `provided`).
+- `PhotoRoadLink` — ADR-000 §5; dodatkowo `rank` (float), `way_bearing` (float \| null), `directed_bearing_diff` (float \| null), `linear_position` (0–1 \| null, pozycja rzutu na segment Overture), `distance_m_recomputed` (float \| null, tylko `provided`), `match_method` (`osm_source_reference`, `spatial_fallback`, `none`, `provided`).
 - `AttributeValue`, `ComparisonResult` — ADR-000 §5.
 - `MatchingConfig`: `radius_m` (25), `tangent_half_length_m` (5), `missing_heading_penalty_m` (5), `bearing_weight_divisor` (9), `ambiguous_margin_m` (2), `junction_radius_m` (15), `heading_tolerance_deg` (30).
 
@@ -309,7 +314,9 @@ Testy jednostkowe na syntetycznych geometriach z ręcznie policzonymi wynikami (
 | MAT-02 remis | Unit | dwie drogi o identycznym `rank` | wybór mniejszego dystansu, potem mniejszego `osm_id`; `ambiguous_candidates` | trzy drogi w marginesie 2 m |
 | MAT-03 brak drogi | Unit | najbliższa droga 25,1 m | `no_osm_within_25m`, brak kandydata rozbieżności | dokładnie 25,0 m → kandydat |
 | MAT-04 skrzyżowanie | Unit | węzeł stopnia 3 w odległości 10 m | `junction_nearby` | węzeł 15,1 m → brak flagi |
-| MAT-05 droga serwisowa | Unit | `highway=service` | `service_way` | `track` |
+| MAT-05 droga serwisowa | Unit | `highway=service` | `service_way`, `service_or_restricted` | `track` → tylko `service_way`; `highway=residential`, `access=private` → `service_or_restricted`; `motor_vehicle=destination` |
+| MAT-09 most / tunel | Unit [P1] | `bridge=yes`; `tunnel=yes`; `layer=1`; Overture z `level_rules` | `grade_separated` | `layer=0`, `bridge=no` → brak flagi |
+| MAT-10 dystans dostarczony | Integration [P1] | link `provided` z `distance_m` = przeliczony + 0,4 m oraz + 0,6 m | brak flagi; `distance_mismatch` | 3 losowe prawdziwe pary (seed) z danych kursu: \|Δ\| ≤ 0,5 m |
 | MAT-06 Overture przez record_id | Unit | segment z `sources.record_id = "w123@4"` i bliższy segment bez referencji | wybrany segment z referencją, `osm_source_reference` | referencja > 25 m → `spatial_fallback` |
 | MAT-07 zgodność z referencją | E2E [P1] | 561 zdjęć kursu | odsetek zgodnych `osm_way_id` w profilu; oczekiwane ≥ 95% | 3 zdjęcia bez drogi |
 | MAT-08 flagi nie znikają | E2E | dane kursu | każde zdjęcie z flagą w `photo_road_links.csv` ma flagę w wyniku (kryterium 5) | — |

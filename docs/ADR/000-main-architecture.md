@@ -140,7 +140,7 @@ Kierunek zależności: **cli → pipeline → (rdzeń) → porty ← adaptery**.
 | `budget` | Limity zapytań i kosztu, log JSONL | stdlib | `cascade` |
 | `cascade` | Orkiestracja poziomów, progi, ścieżka kaskady | `models`, `cache`, `budget`, `questions` | `pipeline`, `evaluation` |
 | `candidates` | Reguły F6.1, priorytet F6.3, powód po polsku, kolejka F6.5–F6.7 | `compare`, `normalize`, wynik kaskady, flagi | `pipeline`, `report` |
-| `evaluation` | Podział po `sequence`, metryki §7, kalibracja | `cascade`, `questions`, pandas | `cli eval`, `report` |
+| `evaluation` | Jedyny czytelnik etykiet (`reference_labels.csv`, `signs/labels.csv`), podział po `sequence`, metryki §7, kalibracja | `cascade`, `questions`, pandas | `cli eval`, `report` |
 | `report` | Zapis plików wynikowych | Jinja2, Pillow, `profile`, `candidates`, `evaluation` | `pipeline` |
 | `pipeline` | Kolejność kroków F2→F7, tryb bez modelu (domyślny), manifest płatnego odczytu | wszystkie moduły rdzenia + porty | `cli` |
 
@@ -153,8 +153,8 @@ Opis koncepcyjny; dokładne pola zbiorów źródłowych — ADR-001 §4.
 | Model | Cel | Kluczowe pola (typ) | Relacje | Trwałość |
 |---|---|---|---|---|
 | `RunParams` | Parametry uruchomienia | `run_id` (str), `bbox` (4×float, WGS84), `attributes` (lista enum), `source_name` (str), `dataset` (`signs` \| `photos`), `model_reading` (bool, domyślnie `false`), `confirmation` (`interactive` \| `flag_yes` \| `cache_only` \| `declined` \| null), `limits` (`max_queries` int = 100, `max_images` int = 25, `max_usd` decimal = 1.00, `reserve_usd` per rola modelu; ADR-003 §3.6), `models` (per poziom: id, reasoning effort), `thresholds` (per poziom × model × atrybut, float 0–1; ADR-003 §3.5), `seed` (str) | 1 run → wiele wyników | `run.json` w katalogu runu |
-| `SourceDescriptor` | Metadane użytego źródła (F7.6) | `name`, `type`, `access`, `tables_or_paths` (lista), `read_started_at`/`read_finished_at` (UTC), bez sekretów | 1 run → 1 źródło | `run.json`, raport |
-| `DataBundle` | Kontrakt danych z dowolnego źródła | zbiory `osm_roads`, `overture_segments`, `photos`, `photo_road_links`, `traffic_signs`, opcjonalnie `signs`, `sign_labels`, `sign_nearest_osm`, `reference_labels`; wszystkie geometrie EPSG:4326 | produkowany przez adapter | tylko w pamięci |
+| `SourceDescriptor` | Metadane użytego źródła (F7.6) | `name`, `type`, `access`, `tables_or_paths` (lista), `read_started_at`/`read_finished_at` (UTC), `input_hashes` (ścieżka → `sha256` przed runem i po runie, wszystkie przeczytane pliki lokalne: dane, obrazy, etykiety), bez sekretów | 1 run → 1 źródło | `run.json`, raport |
+| `DataBundle` | Kontrakt danych z dowolnego źródła | zbiory `osm_roads`, `overture_segments`, `photos`, `photo_road_links`, `traffic_signs`, opcjonalnie `signs`, `sign_nearest_osm`; wszystkie geometrie EPSG:4326; **bez etykiet referencyjnych** (czyta je tylko `evaluation`, ADR-004 §3.10) | produkowany przez adapter | tylko w pamięci |
 | `RejectedRecord` | Odrzucony rekord (F2.3) | `dataset`, `record_id`, `reason` (enum: `missing_file`, `hash_mismatch`, `missing_geometry`, `outside_bbox`, `invalid_value`), `detail` (str) | n → 1 run | profil, raport |
 | `PhotoRoadLink` | Połączenie zdjęcia z drogą | `photo_id`, `osm_way_id` (int \| null), `overture_id` (str \| null), `distance_m` (float), `heading_diff_deg` (float \| null, 0–90), `candidate_count` (int), `flags` (zbiór enum F3.3), `link_source` (`own` \| `provided`) | 1 zdjęcie → 0..1 link | w pamięci, raport |
 | `AttributeValue` | Wartość atrybutu z mapy | `raw` (str/struktura, bez zmian), `normalized` (float km/h, 0,01 \| `paved`/`unpaved`/`unknown_value` \| `yes`/`yes_conditional`/`no`/`unknown_value` \| null), `speed_source` (`explicit` \| `implicit` \| null; `implicit` dla `PL:*`, ADR-002 D-002-4), `status` (`ok`, `missing`, `not_comparable`), `note` (str) | per droga × atrybut × źródło | w pamięci, raport, CSV |
@@ -173,15 +173,15 @@ Opis koncepcyjny; dokładne pola zbiorów źródłowych — ADR-001 §4.
 
 Wszystkie polecenia przyjmują `--config <ścieżka>` i `--output text|json` (domyślnie `text`). Przy `--output json` stdout zawiera **wyłącznie** jeden dokument JSON (koperta poniżej); komunikaty diagnostyczne idą na stderr.
 
-**Koperta JSON:** `ok` (bool), `command` (str), `exit_code` (int), `result` (obiekt, gdy `ok`), `error` (obiekt `code` — stały identyfikator np. `invalid_bbox`, `unknown_source`, `source_unavailable`, `auth_failed`, `budget_exceeded`, `confirmation_required`; `message` — po polsku; `hint` — sugestia alternatywy, np. inne źródło), `warnings` (lista str).
+**Koperta JSON:** `ok` (bool), `command` (str), `exit_code` (int), `result` (obiekt, gdy `ok`), `error` (obiekt `code` — stały identyfikator np. `invalid_bbox`, `unknown_source`, `source_unavailable`, `auth_failed`, `budget_exceeded`, `confirmation_required`, `input_modified`; `message` — po polsku; `hint` — sugestia alternatywy, np. inne źródło), `warnings` (lista str).
 
-**Kody wyjścia (F8.9):** `0` sukces (także po odmowie `N` w potwierdzeniu — raport bez odczytu modelem); `1` błąd danych/walidacji (bbox, konfiguracja, nieznane źródło, naruszenie kontraktu, `confirmation_required`: włączony odczyt modelem bez TTY i bez `--yes`); `2` źródło niedostępne lub brak uprawnień (brak tokenu, 401/403, timeout połączenia, `FAILED` zapytania z błędem uprawnień); `3` run **zakończony** z raportem, ale odczyt modelem jest niepełny: co najmniej jedno pytanie dostało `budget_exceeded` albo bezpiecznik API się otworzył (`model_unavailable` z błędem API lub `circuit_open`; ADR-003 §3.5) (D10-I6).
+**Kody wyjścia (F8.9):** `0` sukces (także po odmowie `N` w potwierdzeniu — raport bez odczytu modelem); `1` błąd danych/walidacji (bbox, konfiguracja, nieznane źródło, naruszenie kontraktu, `confirmation_required`: włączony odczyt modelem bez TTY i bez `--yes`); `2` źródło niedostępne lub brak uprawnień (brak tokenu, 401/403, timeout połączenia, `FAILED` zapytania z błędem uprawnień); `3` run **zakończony** z raportem, ale odczyt modelem jest niepełny: co najmniej jedno pytanie dostało `budget_exceeded` albo bezpiecznik API się otworzył (`model_unavailable` z błędem API lub `circuit_open`; ADR-003 §3.5) (D10-I6); `4` pliki wejściowe zmieniły się w trakcie runu (`input_modified`; nowy kod 2026-11-12, D12).
 
-Kolejność: `1` i `2` przerywają run przed zapisem raportu (`ok=false`, brak `result`). `3` występuje tylko po pełnym zapisie raportu: `ok=true`, `result` kompletny, `warnings` zawiera `budget_exceeded: N pytań` i/lub `circuit_open: <kod błędu>, N pytań`. Agent nie powinien ponawiać runu z kodem 3 bez decyzji człowieka (zmiana limitów albo ustąpienie awarii API) — ponowny run wysyła zapytania tylko dla pytań, których nie ma w cache.
+Kolejność: `1` i `2` przerywają run przed zapisem raportu (`ok=false`, brak `result`). `4` jest sprawdzany na końcu, po zapisie raportu: pipeline liczy `sha256` wszystkich przeczytanych plików wejściowych przed odczytem i ponownie po zapisie wyników; jakakolwiek różnica, brak pliku albo nowy plik w zbiorze wejść → `ok=false`, `error.code = input_modified`, `error.message` z listą zmienionych ścieżek, kod 4 (ma pierwszeństwo przed 3). Raport zostaje na dysku, ale nagłówek `report.md` i `run.json` oznacza go jako niewiarygodny. `3` występuje tylko po pełnym zapisie raportu: `ok=true`, `result` kompletny, `warnings` zawiera `budget_exceeded: N pytań` i/lub `circuit_open: <kod błędu>, N pytań`. Agent nie powinien ponawiać runu z kodem 3 bez decyzji człowieka (zmiana limitów albo ustąpienie awarii API) — ponowny run wysyła zapytania tylko dla pytań, których nie ma w cache.
 
 | Polecenie | Wejście | Wyjście (`result`) | Błędy |
 |---|---|---|---|
-| `mapqa run` | `--bbox minx,miny,maxx,maxy` (domyślnie `19.80,49.95,20.15,50.15` dla `--dataset photos`; dla `--dataset signs` domyślnie brak filtra bbox — D10-I2), `--attributes speed_limit,surface,lit`, `--source <nazwa>`, `--dataset signs\|photos` (MVP: `signs`), `--model` (włącza płatny odczyt; domyślnie wyłączony — D11), `--no-model` (wymusza tryb bez modelu mimo `model_reading = true`), `--yes` (potwierdza manifest bez pytania), `--max-queries N` (100), `--max-images N` (25), `--max-usd X` (1.00), `--level1-model`, `--level2-model`, `--level2-effort`, `--threshold-l1`, `--threshold-l2` (nadpisują wszystkie atrybuty dla bieżącego modelu danego poziomu), `--split all\|calibration\|test` | `run_id`, `output_dir`, ścieżki plików, `model_reading`, `confirmation`, manifest kosztu, liczności lejka kaskady, liczba kandydatów per atrybut/priorytet, koszt per poziom, liczba `budget_exceeded` | 1: niepoprawny bbox (odwrócone granice, lon ∉ [-180,180], lat ∉ [-90,90]), nieznany atrybut, nieznane źródło (z listą dostępnych), `confirmation_required`; 2: źródło niedostępne; 3: budżet albo bezpiecznik API |
+| `mapqa run` | `--bbox minx,miny,maxx,maxy` (domyślnie `19.80,49.95,20.15,50.15` dla `--dataset photos`; dla `--dataset signs` domyślnie brak filtra bbox — D10-I2), `--attributes speed_limit,surface,lit`, `--source <nazwa>`, `--dataset signs\|photos` (MVP: `signs`), `--model` (włącza płatny odczyt; domyślnie wyłączony — D11), `--no-model` (wymusza tryb bez modelu mimo `model_reading = true`), `--yes` (potwierdza manifest bez pytania), `--max-queries N` (100), `--max-images N` (25), `--max-usd X` (1.00), `--level1-model`, `--level2-model`, `--level2-effort`, `--threshold-l1`, `--threshold-l2` (nadpisują wszystkie atrybuty dla bieżącego modelu danego poziomu), `--split all\|calibration\|test` | `run_id`, `output_dir`, ścieżki plików, `model_reading`, `confirmation`, manifest kosztu, liczności lejka kaskady, liczba kandydatów per atrybut/priorytet, koszt per poziom, liczba `budget_exceeded` | 1: niepoprawny bbox (odwrócone granice, lon ∉ [-180,180], lat ∉ [-90,90]), nieznany atrybut, nieznane źródło (z listą dostępnych), `confirmation_required`; 2: źródło niedostępne; 3: budżet albo bezpiecznik API; 4: wejście zmienione w trakcie runu |
 | `mapqa sources list` | — | lista `{name, type, access, is_default, resolved_by}` gdzie `resolved_by` ∈ `flag`, `env`, `config`, `builtin` | 1: niepoprawny plik konfiguracyjny |
 | `mapqa sources check` | `--source`, `--bbox` | `{name, reachable, tables: {nazwa: {total, in_bbox}}, warnings}` | 1: nieznane źródło; 2: brak dostępu |
 | `mapqa eval run` | jak `run`, domyślnie `--split test`; odczyt modelem zawsze włączony, więc zawsze obowiązuje potwierdzenie manifestu (`y/N` albo `--yes`) | `EvaluationReport` + ścieżka `evaluation.json` | jak `run` |
@@ -365,6 +365,19 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 - (-) Dwie flagi więcej przy płatnym runie; testy E2E `paid` podają `--model --yes`.
 **Warunek rewizji:** Gdy narzędzie dostanie budżet produkcyjny z rozliczaniem per użytkownik.
 
+### D12. Kontrola niezmienności wejść i kod wyjścia 4
+**Status:** Accepted
+**Data:** 2026-11-12
+**Kontekst:** PRD F2.2 wymaga, aby pliki wejściowe były tylko do odczytu. Test FIL-06 (ADR-001) sprawdza to raz, ale nie chroni pojedynczego runu przed zmianą danych przez inny proces (np. `download_photos.py` uruchomiony równolegle). Wersja referencyjna prowadzącego (ADR-000 D-05, ADR-004 §5) liczy `sha256` wejść przed i po runie i zwraca osobny kod.
+**Decyzja:** Pipeline liczy `sha256` wszystkich przeczytanych plików lokalnych (dane, obrazy, etykiety) przed odczytem i po zapisie wyników; różnica → kod **4** `input_modified` (nowy kod dopisany do schematu §6 bez zmiany numeracji 0–3), raport oznaczony jako niewiarygodny. Hashe trafiają do `run.json`. Przyjęte za wersją referencyjną prowadzącego (tam kod 5; u nas 4, bo nasz schemat ma kody 0–3).
+**Odrzucone alternatywy:**
+- Kod 1 (błąd danych): agent nie odróżniłby zmiany danych w trakcie runu od błędnego wywołania.
+- Kontrola tylko mtime: tańsza, ale nie wykrywa zmiany z zachowanym czasem modyfikacji.
+**Konsekwencje:**
+- (+) Raport zawsze odpowiada danym, które istniały przez cały run; ślad hashy w `run.json`.
+- (-) Dwukrotne hashowanie ~800 obrazów i ~25 MB danych (szacunek: kilka sekund, wliczone w limit 2 min PRD §6).
+**Warunek rewizji:** Gdy źródłem będą wyłącznie dane zdalne bez plików lokalnych albo hashowanie przekroczy 10% czasu runu.
+
 ---
 
 ## 9. Diagramy
@@ -524,13 +537,14 @@ Szczegółowe tabele scenariuszy są w ADR 001–004. Scenariusze przekrojowe:
 | Tryb bez modelu (domyślny i `--no-model`) | dane z plików, bez `--model` | brak wywołań HTTP (respx bez tras, `assert_all_called=False`, każde żądanie = błąd testu), raport powstaje | brak `OPENROUTER_API_KEY` nie jest błędem |
 | Potwierdzenie płatnych wywołań | `--model` bez cache: (a) TTY + `y`, (b) TTY + `N`, (c) stdin bez TTY bez `--yes`, (d) `--yes` | (a) i (d) odczyt modelem, manifest przed 1. żądaniem; (b) raport bez odczytu, kod 0, `model_reading_declined`; (c) kod 1, `confirmation_required`, 0 żądań, brak raportu | pełne pokrycie z cache → brak pytania; `--output json` → manifest na stderr, stdout tylko JSON |
 | Koperta JSON | `--output json` dla każdego polecenia | stdout parsuje się jako jeden obiekt JSON z polami koperty | błąd → `ok=false`, `error.code` |
+| Niezmienność wejść | run na kopii danych; wariant z plikiem zmienionym przez hook testowy w trakcie runu | bez zmiany: `sha256` przed = po, kod 0; ze zmianą: kod 4, `input_modified`, lista ścieżek | usunięty plik obrazu w trakcie runu → kod 4 |
 | Sekrety | env z fałszywymi tokenami o znanym wzorcu | wzorzec nie występuje w stdout, stderr, logach, cache, raportach | wyjątek z httpx zawierający nagłówki |
 
 ### Techniczne kryteria akceptacji
 
 - TAC-01: `uv run --project app pytest` przechodzi bez dostępu do sieci (testy `e2e`/`paid` pominięte i policzone w podsumowaniu).
 - TAC-02: Każde polecenie z `--output json` zwraca na stdout dokładnie jeden dokument JSON zgodny z kopertą §6 (walidacja modelem Pydantic w teście).
-- TAC-03: Kody wyjścia 0/1/2/3 są zwracane dokładnie w warunkach z §6; test na każdy kod.
+- TAC-03: Kody wyjścia 0/1/2/3/4 są zwracane dokładnie w warunkach z §6; test na każdy kod.
 - TAC-04: `mapqa run --no-model` na pełnym bbox z plików kończy się w ≤ 120 s na maszynie kursowej (pomiar w E2E, wynik w podsumowaniu zadania).
 - TAC-05: Dwa kolejne runy z tymi samymi parametrami i ciepłym cache (pierwszy bez `budget_exceeded` i bez otwartego bezpiecznika) dają identyczne `manual_queue.csv` i `evaluation.json` (porównanie bajtowe), a `costs.jsonl` drugiego runu ma 0 wpisów `cache=miss`.
 - TAC-06: Fałszywe sekrety o wzorcu `TEST_SECRET_[0-9a-f]{16}` nie pojawiają się w żadnym pliku katalogu runu, cache ani w stdout/stderr (test przeszukujący bajty).
@@ -540,4 +554,5 @@ Szczegółowe tabele scenariuszy są w ADR 001–004. Scenariusze przekrojowe:
 - TAC-10: Wszystkie progi, limity i modele z PRD mają domyślne wartości w `mapqa.example.toml` i są nadpisywalne flagą CLI (test parametryzowany).
 - TAC-11: Raport, CSV i komunikaty dla człowieka są po polsku; identyfikatory i nazwy pól w oryginale (test snapshot sekcji raportu).
 - TAC-13: Run bez `--model` nie tworzy klienta OpenRouter (0 żądań, brak wymaganego `OPENROUTER_API_KEY`); run z `--model` bez TTY i bez `--yes` kończy się kodem 1 przed pierwszym żądaniem (test z respx zliczającym trasy).
-- TAC-12: Test architektury: moduły rdzenia (`matching`, `normalize`, `compare`, `cascade`, `candidates`, `evaluation`) nie importują `httpx`, `sources.databricks_*` ani `cli`.
+- TAC-12: Test architektury: moduły rdzenia (`matching`, `normalize`, `compare`, `cascade`, `candidates`, `evaluation`) nie importują `httpx`, `sources.databricks_*` ani `cli`. Żaden moduł poza `evaluation` nie importuje `evaluation.labels` ani nie zawiera ciągów `reference_labels.csv` / `labels.csv` (ADR-004 TAC-004-07).
+- TAC-14: `run.json` zawiera `sha256` każdego przeczytanego pliku wejściowego przed i po runie; zmiana pliku w trakcie runu daje kod 4.
