@@ -1,0 +1,50 @@
+# Przykładowa konfiguracja mapqa (PRD F8.2, ADR-000 §5). Skopiuj do mapqa.toml w katalogu roboczym.
+# Plik zawiera wyłącznie NAZWY zmiennych środowiskowych, nigdy wartości sekretów (PRD F8.8).
+
+default_source = "files"
+
+# Odczyt modelem jest domyślnie wyłączony (PRD F1.4). Włącza go flaga --model.
+model_reading = false
+
+# Timeout pojedynczego żądania HTTP do OpenRouter, bez ponowień (ADR-003 D-003-3).
+timeout_s = 60
+
+cache_dir = "course-materials/exercise-data/map-qa/data/cache"
+reports_dir = "reports/map-qa"
+labels_path = "course-materials/exercise-data/map-qa"
+
+[sources.files]
+type = "files"
+path = "course-materials/exercise-data/map-qa"
+
+[sources.course-databricks]  # adapter dostępny od przyrostu P1
+type = "databricks"
+access = "rest"
+host_env = "DATABRICKS_HOST"
+token_env = "DATABRICKS_TOKEN"
+warehouse_id_env = "DATABRICKS_SQL_WAREHOUSE_ID"
+schema = "workspace.map_qa"
+photos_dir = "course-materials/exercise-data/map-qa/data/photos"
+
+[models]  # ADR-000 D9; DECISION_MODEL / LLM_MODEL nadpisują, jeśli pola nie ma w pliku
+level1 = "typesafe/jev-1.14"
+level2 = "openai/gpt-6-luna"
+level2_effort = "medium"
+comparison = "openai/gpt-6-luna-decisions"
+
+[limits]  # na jedno uruchomienie (PRD F5.9, ADR-003 §3.6)
+max_queries = 100
+max_images = 25
+max_usd = "1.00"
+
+[limits.reserve_usd]
+level1 = "0.02"
+level2 = "0.04"
+comparison = "0.02"
+
+# Progi per poziom × model × atrybut (PRD F5.6). Brak wpisu = 0.8 z ostrzeżeniem „próg niekalibrowany”.
+[thresholds.level1."typesafe/jev-1.14"]
+speed_limit = 0.8
+
+[thresholds.level2."openai/gpt-6-luna"]
+speed_limit = 0.8
