@@ -116,7 +116,9 @@ Tagi kierunkowe: `maxspeed:forward` 261, `maxspeed:backward` 247. Na 223 drogach
 4. **Kierunek rozstrzyga często, a dane kierunkowe są słabe:** 223 drogi mają różne limity forward/backward, a 260 ma tylko tagi kierunkowe. Jednocześnie 15 zdjęć nie ma heading, 35 ma kamerę przeciwnie do kierunku geometrii, a 31 to niejednoznaczne panoramy. Dla tych przypadków nasze wnioskowanie kierunku (D-002-3) nie ma danych, więc potrzebny jest jawny status `not_comparable`.
 5. **Overture to listy reguł, nie jedna wartość:** 911 segmentów ma kilka reguł, 1925 reguł ma `between`, a 880 ma `when`. Uproszczenie „pierwsza reguła” dałoby błędne porównania. Nasza decyzja „pozycja liniowa rzutu” dla `between` jest potrzebna, a do tego dochodzą reguły warunkowe `when`, których ADR jeszcze w pełni nie obsługuje.
 
-## 3 pytania do człowieka
+## 3 pytania do człowieka (odpowiedzi 2026-11-12, wpisane do ADR-002 D-002-4 i PRD §7)
+
+Odpowiedzi: 1. liczba wygrywa, sprzeczność tylko oznaczamy; 2. tak (`PL:rural` → 90, `PL:expressway` → 120, `sign` bez liczby → `unknown`); 3. MVP na obecnej próbce z adnotacją.
 
 1. **Pierwszeństwo przy sprzeczności typu i wartości** (229 dróg, np. `PL:urban` + 70): czy liczba w `maxspeed` jest rozstrzygająca, a sprzeczność tylko oznaczamy, czy taka droga od razu staje się kandydatem do weryfikacji?
 2. **Które domyślne wartości `PL:*` przyjmujemy dla dróg bez liczby?** `PL:urban` → 50 jest uzgodnione. Czy przyjmujemy też `PL:rural` → 90 i `PL:expressway` → 120 (oba jako implicit), a `sign` bez liczby (19) traktujemy jako `unknown`?

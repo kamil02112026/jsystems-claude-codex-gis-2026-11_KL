@@ -214,6 +214,7 @@ Etykiety referencyjne są **roboczą referencją, nie prawdą terenową** (przyg
 
 ### Zasady
 
+- **Obciążenie próbki (decyzja 2026-11-12):** MVP oceniamy na dostarczonych 561 zdjęciach z jawną adnotacją. Według profilu danych (`reports/map-qa/profile.md`) 95% dróg połączonych ze zdjęciami ma `maxspeed`, wobec 16,3% w całym OSM, a zdjęcia Mapillary dobrano przez znaki. Raport (F7) pokazuje tę adnotację przy metrykach i nie uogólnia wyników na całe miasto. Status `osm_missing` będzie w próbce rzadki.
 - Do metryk używamy **tylko** etykiet `status = certain`. Etykiety `uncertain` są wykluczone, a ich liczba jest raportowana.
 - Każda metryka ma **jawny mianownik**: liczba etykiet `certain`, liczba odpowiedzi modelu bez abstencji, liczba abstencji, `model_unavailable`.
 - Definicje (liczone dla **końcowego wyniku kaskady**, a pomocniczo osobno dla każdego poziomu):

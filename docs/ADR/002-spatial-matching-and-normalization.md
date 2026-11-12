@@ -80,22 +80,31 @@ Flagi `grade_separated`, `service_or_restricted` i `distance_mismatch` (przyjęt
 
 Każda funkcja normalizująca zwraca `AttributeValue` (`raw` bez zmian, `normalized`, `status`, `note`, dla prędkości także `speed_source`). Surowe wartości są zawsze pokazywane w raporcie (F4.2).
 
-**OSM `maxspeed` [MVP]** (kolejność reguł):
+**OSM `maxspeed` [MVP]**
 
-| Wejście (`raw`) | `normalized` | `status` |
+Wejścia: liczba z `maxspeed` oraz **typ** z `maxspeed:type`, a gdy go brak, z `source:maxspeed`. Gdy oba tagi typu istnieją i się różnią (18 dróg w profilu), obowiązuje `maxspeed:type`, a `note` podaje oba. Ta sama tabela dotyczy `maxspeed:forward` i `maxspeed:backward`, w których tekst `PL:urban` występuje jako wartość (5 przypadków w profilu). Profil danych (`reports/map-qa/profile.md`, 2026-11-12): kolumna `maxspeed` zawiera wyłącznie liczby całkowite, a kody `PL:*` występują tylko w tagach typu.
+
+Kolejność reguł (pierwsza pasująca):
+
+| Wejście | `normalized` | `status` |
 |---|---|---|
-| liczba, np. `50` | 50 | `ok`, `speed_source = explicit` |
+| liczba + typ `PL:*` z tej samej wartości domyślnej (np. `50` + `PL:urban`, `30` + `PL:zone30`) | liczba | `ok`, `speed_source = implicit`, `note = "wartość domyślna <typ>"` |
+| liczba + typ `PL:*` z inną wartością domyślną (np. `70` + `PL:urban`; 229 dróg w profilu) | **liczba** (liczba wygrywa) | `ok`, `speed_source = explicit`, flaga `type_value_conflict`, `note = "typ <typ> (domyślnie <d> km/h) ≠ maxspeed <n>"` |
+| liczba bez typu albo z typem `sign` / `PL:sign*` | liczba | `ok`, `speed_source = explicit` |
 | `<n> mph` (także `<n>mph`, wielkość liter dowolna) | round(n × 1,609344; 2), np. `30 mph` → 48,28 | `ok`, `speed_source = explicit`, `note = "przeliczono z mph"` |
 | `<n> km/h` | n | `ok`, `speed_source = explicit` |
-| `PL:urban` | 50 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:urban (obszar zabudowany)"` |
-| `PL:rural` | 90 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:rural (poza obszarem zabudowanym)"` |
-| `PL:zone<n>` / `PL:zone:<n>` (np. `PL:zone30`) | n | `ok`, `speed_source = implicit`, `note = "strefa PL:zone<n>"` |
-| `PL:motorway` | 140 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:motorway"` |
-| `PL:expressway` | 120 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:expressway (dwujezdniowa)"` |
-| `PL:living_street` | 20 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:living_street (strefa zamieszkania)"` |
-| inny kod `PL:*` spoza tej tabeli (np. `PL:trunk`) | null | `not_comparable`, `speed_source = implicit`, `note = "nieznany kod PL:*"` |
+| brak liczby, typ `PL:urban` | 50 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:urban (obszar zabudowany)"` |
+| brak liczby, typ `PL:rural` | 90 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:rural (poza obszarem zabudowanym)"` |
+| brak liczby, typ `PL:zone<n>` / `PL:zone:<n>` (np. `PL:zone40`) | n | `ok`, `speed_source = implicit`, `note = "strefa PL:zone<n>"` |
+| brak liczby, typ `PL:motorway` | 140 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:motorway"` |
+| brak liczby, typ `PL:expressway` | 120 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:expressway (dwujezdniowa)"` |
+| brak liczby, typ `PL:living_street` | 20 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:living_street (strefa zamieszkania)"` |
+| brak liczby, typ `sign` / `PL:sign*` (19 dróg w profilu) | null | `not_comparable`, `note = "unknown: oznaczenie znaku bez wartości"` |
+| brak liczby, inny kod `PL:*` spoza tej tabeli (np. `PL:trunk`) | null | `not_comparable`, `speed_source = implicit`, `note = "nieznany kod PL:*"` |
 | wiele wartości (`50;70`), `none`, `signals`, `variable`, `walk`, inne | null | `not_comparable`, `note` z powodem |
-| brak tagu | null | `missing` (nigdy 0 ani `none`) |
+| brak liczby i typu | null | `missing` (nigdy 0 ani `none`) |
+
+Wiersze z mph, jednostkami i wieloma wartościami zostają jako zabezpieczenie: w obecnym snapshocie nie występują.
 
 **Wartości domyślne `PL:*` (decyzja użytkownika 2026-11-12, D-002-4):** wartość liczbowa jest zachowana i porównywana (np. `PL:urban` → 50 km/h), ale wynik zawsze ma `speed_source = implicit`. Pełna tabela powyżej to jedyne wspierane kody; dotyczą samochodu osobowego bez warunków dodatkowych (pora doby, przyczepa). Raport pokazuje surowy tag, wartość i etykietę „implicit” w kolumnie OSM; powód kandydata i wynik porównania z wartością `implicit` po którejkolwiek stronie są oznaczone jako „porównanie z wartością domyślną” (ADR-004 §3.3). Wersja referencyjna prowadzącego nie podstawia wartości (`kind = implicit`, `value_kmh = NULL`); przyjmujemy tylko jego oznaczenie `implicit`.
 
@@ -210,6 +219,13 @@ Gdy którakolwiek strona ma `speed_source = implicit`, `ComparisonResult.implici
 **Data:** 2026-11-12
 **Kontekst:** Wersja referencyjna prowadzącego (ADR-001 §3.3, D-13) nie zamienia `PL:urban` itp. na liczby (fałszywa precyzja: limit zależy od pory doby i typu obszaru). Nasza wersja z 2026-11-03 podstawiała wartości bez rozróżnienia od tagów jawnych. W danych kursu kody `PL:*` są częste na drogach, gdzie kandydat ze zdjęcia ma największą wartość.
 **Decyzja (decyzja użytkownika 2026-11-12):** Zachowujemy wartości z tabeli §3.5 (np. `PL:urban` → 50 km/h), ale każda ma `speed_source = implicit`; porównania i powody kandydatów z wartością `implicit` są tak oznaczone w raporcie, CSV i `ComparisonResult.implicit`. Od prowadzącego przyjmujemy też tolerancję |Δ| < 0,5 km/h i przeliczenie mph z dokładnością 0,01.
+
+**Uzupełnienie po profilu danych (decyzje użytkownika 2026-11-12):**
+- Typ `PL:*` czytamy z `maxspeed:type`, a gdy go brak, z `source:maxspeed`. W snapshocie kolumna `maxspeed` zawiera tylko liczby, więc bez tego reguła implicit nie zadziałałaby na żadnej drodze. Realnie dotyczy 1456 dróg bez liczby (`PL:urban` 1401, `PL:rural` 46, `PL:expressway` 7, `PL:zone40` 2).
+- **Liczba wygrywa:** przy sprzeczności typu i liczby (229 dróg, np. `PL:urban` + 70) `normalized` = liczba, `speed_source = explicit`, a sprzeczność trafia do flagi `type_value_conflict` i `note`. Sama sprzeczność nie tworzy kandydata.
+- Przyjmujemy wartości domyślne `PL:urban` → 50, `PL:rural` → 90 i `PL:expressway` → 120, wszystkie jako `implicit`.
+- Typ `sign` bez liczby (19 dróg) → `not_comparable` z powodem `unknown`.
+- Liczba zgodna z wartością domyślną swojego typu (np. `50` + `PL:urban`) jest oznaczana jako `implicit`, bo opisuje limit ustawowy, a nie znak. To interpretacja implementacyjna; do zmiany, jeśli właściciel PRD zdecyduje inaczej.
 **Odrzucone alternatywy:**
 - `implicit` bez wartości (wersja referencyjna): wszystkie drogi z `PL:*` wypadłyby z porównania jako `not_comparable`, a analityk straciłby kandydatów ze zdjęcia.
 - Wartość bez oznaczenia (nasza wersja 2026-11-03): ukrywa, że porównanie dotyczy wartości ustawowej, nie znaku.
@@ -319,7 +335,7 @@ Testy na syntetycznych geometriach z ręcznie policzonymi wynikami (punkty i lin
 | MAT-06 Overture przez record_id | Unit | segment z `sources.record_id = "w123@4"` i bliższy segment bez referencji | wybrany segment z referencją, `osm_source_reference` | referencja > 25 m → `spatial_fallback` |
 | MAT-07 zgodność z referencją | E2E [P1] | 561 zdjęć kursu | odsetek zgodnych `osm_way_id` w profilu; oczekiwane ≥ 95% | 3 zdjęcia bez drogi |
 | MAT-08 flagi nie znikają | E2E | dane kursu | każde zdjęcie z flagą w `photo_road_links.csv` ma flagę w wyniku (kryterium 5) | — |
-| NRM-01 maxspeed tabela | Unit | każdy wiersz tabeli §3.5 | `normalized`, `status`, `speed_source` z tabeli; `30 mph` → 48,28 | `" 50 "` ze spacjami, `50 MPH`, `30mph`; `PL:trunk` → `not_comparable` |
+| NRM-01 maxspeed tabela | Unit | każdy wiersz tabeli §3.5 | `normalized`, `status`, `speed_source` z tabeli; `30 mph` → 48,28 | `" 50 "` ze spacjami, `50 MPH`, `30mph`; `PL:trunk` → `not_comparable`; `maxspeed=70` + `maxspeed:type=PL:urban` → 70, `explicit`, `type_value_conflict`; brak liczby + `source:maxspeed=PL:urban` → 50 `implicit`; `maxspeed:type` ≠ `source:maxspeed` → wygrywa `maxspeed:type`; `sign` bez liczby → `not_comparable`; `maxspeed:backward=PL:urban` → 50 `implicit` |
 | NRM-06 tolerancja prędkości | Unit [P3] | OSM 48,28 (z `30 mph`) vs Overture 48; 50 vs 50,4; 50 vs 50,5 | `agree`; `agree`; `disagree` | — |
 | NRM-07 implicit | Unit | OSM `PL:urban`, Overture 50; OSM `PL:urban`, odczyt 40 | `agree` z `implicit = true`; kandydat z powodem zawierającym „implicit” | `PL:zone30` vs 30 |
 | NRM-02 kierunkowe | Unit | `forward=50`, `backward=70`, różne `bearing_diff` | reguła §3.5 | tylko `forward` + `maxspeed` |
