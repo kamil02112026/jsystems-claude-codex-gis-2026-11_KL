@@ -9,7 +9,7 @@ from decimal import Decimal
 from mapqa.budget.budget import Budget
 from mapqa.budget.cost_log import CostLog
 from mapqa.cache.sqlite_cache import AnswerCache, CacheEntry, CacheKey
-from mapqa.cascade.ports import ModelPort, PortResult
+from mapqa.cascade.ports import ModelPort, PortResult, PortTransportError
 from mapqa.config.schema import AppConfig
 from mapqa.contract.models import CascadeResult, CostLogEntry, ModelAttempt
 from mapqa.models.image_prep import ImageOutOfBounds, PreparedImage
@@ -162,6 +162,8 @@ class Cascade:
         assert self._port is not None
         try:
             return self._port.ask(level=level, model=model, reasoning_effort=effort, image=image, question=question)
+        except PortTransportError as exc:  # API/transport failure: breaker, no escalation (§3.4)
+            return PortResult(answer=None, probability=None, parse_status="model_unavailable", error_class=exc.error_class)
         except Exception as exc:  # F5.7: one bad question must not stop the run
             return PortResult(
                 answer=None, probability=None, parse_status="invalid_response", error_class=type(exc).__name__

@@ -25,7 +25,20 @@ class PortResult:
     response_body: str | None = None
 
 
+class PortTransportError(Exception):
+    """Raised by a port for HTTP ≠ 200, timeouts and connection errors when it does not return a
+    `model_unavailable` PortResult itself. The cascade maps it to `model_unavailable`, opens the breaker
+    and does NOT escalate (ADR-003 §3.4, §3.5). Any other exception is treated as `invalid_response` (F5.7).
+    """
+
+    def __init__(self, error_class: str) -> None:
+        super().__init__(error_class)
+        self.error_class = error_class
+
+
 class ModelPort(Protocol):
+    """Contract for T20 clients: transport problems → `model_unavailable` result or PortTransportError."""
+
     def ask(
         self,
         *,

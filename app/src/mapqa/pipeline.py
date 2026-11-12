@@ -21,10 +21,10 @@ from mapqa.cache.sqlite_cache import AnswerCache, CacheKey
 from mapqa.candidates.queue import QueueItem, build_queue
 from mapqa.candidates.rules import CandidateInput, build_candidates
 from mapqa.cascade.cascade import Cascade
-from mapqa.cascade.ports import ModelPort
+from mapqa.cascade.ports import ModelPort, PortResult
 from mapqa.config import LoadedConfig, load
 from mapqa.contract.bundle import Bbox, SignLink, SignsBundle
-from mapqa.contract.errors import ConfirmationRequired, InputModified, MapQAError
+from mapqa.contract.errors import ConfirmationRequired, InputModified
 from mapqa.contract.models import AttributeValue, CascadeResult, Confirmation, RunLimits
 from mapqa.evaluation import calibrate, calibration_pairs, evaluation_input_files, photo_split, run_evaluation
 from mapqa.matching.provided import map_provided_links
@@ -86,7 +86,13 @@ def _sha256(path: Path) -> str | None:
 
 
 def _hash_all(paths: list[Path]) -> dict[str, str | None]:
-    return {str(p): _sha256(p) for p in paths}
+    """sha256 of every input file plus a listing hash of each input directory, so a file added to or
+    removed from an input directory during the run is detected too (ADR-000 §6, review #5)."""
+    out: dict[str, str | None] = {str(p): _sha256(p) for p in paths}
+    for d in sorted({p.parent for p in paths}):
+        names = sorted(x.name for x in d.iterdir() if x.is_file()) if d.is_dir() else []
+        out[f"{d}{os.sep}*"] = hashlib.sha256("\n".join(names).encode("utf-8")).hexdigest()
+    return out
 
 
 # ---- configuration with CLI overrides ---------------------------------------------------------
@@ -186,11 +192,7 @@ def _model_phase(
     cache = AnswerCache(cache_path)
     try:
         usable = [pid for pid in photo_ids if signs[pid].image_status == "ok"]
-        uncached = [
-            pid
-            for pid in usable
-            if cache.get(CacheKey(1, signs[pid].crop_sha256, QUESTION.question_id, c.models.level1, "", QUESTION.prompt_version)) is None
-        ]
+        uncached = [pid for pid in usable if _needs_request(cache, c, signs[pid].crop_sha256)]
         manifest = _manifest(loaded, len(uncached))
         confirmation: Confirmation = _confirm(manifest, args) if uncached else "cache_only"
         if confirmation == "declined":
@@ -228,9 +230,26 @@ def _model_phase(
         cache.close()
 
 
+def _needs_request(cache: AnswerCache, c: Any, sha: str) -> bool:
+    """True when the cascade would send at least one request for this image (review #2, D11).
+
+    L1 miss → request. L1 hit that is not confident at the L1 threshold escalates, so an L2 miss → request.
+    """
+    l1 = cache.get(CacheKey(1, sha, QUESTION.question_id, c.models.level1, "", QUESTION.prompt_version))
+    if l1 is None:
+        return True
+    if l1.status_for(c.threshold(level=1, model=c.models.level1, attribute=ATTRIBUTE)) == "confident":
+        return False
+    l2 = cache.get(CacheKey(2, sha, QUESTION.question_id, c.models.level2, c.models.level2_effort, QUESTION.prompt_version))
+    return l2 is None
+
+
 class _CacheOnlyPort:
-    def ask(self, **_: Any):  # pragma: no cover - cache_only means every question is cached
-        raise MapQAError("Wszystkie pytania powinny być w cache (cache_only)")
+    """Used only when `_needs_request` found nothing to send. If it is ever reached, it fails safe:
+    no network, `model_unavailable` (opens the breaker, visible as a warning) instead of a silent answer."""
+
+    def ask(self, **_: Any) -> PortResult:
+        return PortResult(answer=None, probability=None, parse_status="model_unavailable", error_class="cache_only_unexpected")
 
 
 def _funnel(results: dict[str, CascadeResult]) -> FunnelRow:

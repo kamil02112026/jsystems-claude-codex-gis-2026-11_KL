@@ -17,7 +17,8 @@ pytestmark = pytest.mark.e2e
 def _cli(repo_root: Path, *args: str, env_extra: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     import os
 
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("MAPQA_", "OPENROUTER"))}
+    # clean environment: no UTF-8 overrides, so the CLI itself must emit UTF-8 (review finding #1)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("MAPQA_", "OPENROUTER", "PYTHONUTF8", "PYTHONIOENCODING"))}
     env.update(env_extra or {})
     return subprocess.run(
         [sys.executable, "-m", "mapqa.cli", *args],

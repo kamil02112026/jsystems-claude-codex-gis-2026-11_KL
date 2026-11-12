@@ -87,5 +87,7 @@ def test_mvp_rejects_photos_dataset(capsys) -> None:
     assert _json(capsys)["error"]["code"] == "dataset_not_available"
 
 
-def test_argparse_error_is_exit_1_json(capsys) -> None:
-    assert main(["run", "--max-queries", "abc", "--output", "json"]) == 1
+@pytest.mark.parametrize("fmt", [["--output", "json"], ["--output=json"]])
+def test_argparse_error_is_exit_1_json(capsys, fmt: list[str]) -> None:  # review #6
+    assert main(["run", "--max-queries", "abc", *fmt]) == 1
+    assert _json(capsys)["error"]["code"] == "invalid_arguments"

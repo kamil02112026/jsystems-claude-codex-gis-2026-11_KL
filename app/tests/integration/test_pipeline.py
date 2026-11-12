@@ -131,7 +131,48 @@ def test_circuit_breaker_gives_code_3_and_report(cfg: Path, capsys, monkeypatch)
     assert port.calls == 3  # first error opens the breaker; no further requests (TAC-003-06)
     assert any(w.startswith("circuit_open") for w in doc["warnings"])
     report = (Path(doc["result"]["output_dir"]) / "report.md").read_text(encoding="utf-8")
-    assert "Odczyt przerwany" in report or "503" in report
+    assert "Odczyt przerwany" in report and "503" in report  # review #9: both must be present
+
+
+def test_level2_cache_miss_still_requires_confirmation(cfg: Path, capsys, monkeypatch) -> None:
+    """Review #2: L1 fully cached but L2 not cached must not be treated as cache_only (D11)."""
+    port = FakePort(probability=0.5)  # below threshold on both levels → both levels asked
+    monkeypatch.setattr(pipeline, "build_port", lambda *a, **k: port)
+    big = ("--max-images", "200", "--max-queries", "400", "--max-usd", "100")
+    _run(cfg, capsys, "--model", "--yes", *big)
+    calls = port.calls
+    assert calls == 2 * 119  # every image: L1 + L2, all cached now
+    monkeypatch.setattr(pipeline, "_stdin_is_tty", lambda: False)
+    rc2, doc2 = _run(cfg, capsys, "--model", *big, "--level2-model", "other/model")
+    assert rc2 == 1 and doc2["error"]["code"] == "confirmation_required"
+    assert port.calls == calls
+
+
+def test_new_input_file_during_run_gives_code_4(cfg: Path, capsys, monkeypatch, tmp_path: Path, data_dir: Path) -> None:
+    """Review #5: a file added to an input directory during the run must be detected (ADR-000 §6)."""
+    import shutil
+
+    copy = tmp_path / "data2"
+    shutil.copytree(data_dir / "signs", copy / "signs", ignore=shutil.ignore_patterns("photos"))
+    shutil.copy(data_dir / "osm_roads.parquet", copy / "osm_roads.parquet")
+    cfg.write_text(cfg.read_text(encoding="utf-8").replace(data_dir.as_posix(), copy.as_posix()), encoding="utf-8")
+    original = pipeline._write_outputs
+
+    def add_file(*args, **kwargs):
+        written = original(*args, **kwargs)
+        (copy / "signs" / "crops" / "intruder.jpg").write_bytes(b"x")
+        return written
+
+    monkeypatch.setattr(pipeline, "_write_outputs", add_file)
+    rc, doc = _run(cfg, capsys)
+    assert rc == 4 and doc["error"]["code"] == "input_modified"
+
+
+@pytest.mark.parametrize(("flag", "value"), [("--max-queries", "-5"), ("--max-usd", "abc"), ("--max-images", "-1"), ("--max-usd", "-1")])
+def test_invalid_limits_are_exit_1_envelope(cfg: Path, capsys, flag: str, value: str) -> None:
+    """Review #3: bad limit values must give a JSON envelope with code 1, not a traceback."""
+    rc, doc = _run(cfg, capsys, flag, value)
+    assert rc == 1 and doc["error"]["code"] == "invalid_limits"
 
 
 def test_prompt_never_pollutes_json_stdout(cfg: Path, capsys, monkeypatch) -> None:

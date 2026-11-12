@@ -32,6 +32,7 @@ CROP = REPO / "course-materials" / "exercise-data" / "map-qa" / "signs" / "crops
 OUT = REPO / "app" / "tests" / "fixtures" / "captures" / "openrouter"
 MAX_REQUESTS = 6
 MAX_USD = Decimal("0.20")
+RESERVE_USD = Decimal("0.04")  # highest per-request reserve (level 2, ADR-003 §3.6)
 TIMEOUT_S = 60
 
 
@@ -54,7 +55,7 @@ def build_plan() -> list[Step]:
 
 
 def _crop() -> Path:
-    # one fixed, readable B-33 crop from the course set (CC BY-SA 4.0, no personal data)
+    # first crop in sorted order (deterministic; CC BY-SA 4.0, no personal data) — not hand-picked
     return sorted(CROP.glob("*.jpg"))[0]
 
 
@@ -138,7 +139,8 @@ def main(argv: list[str] | None = None) -> int:
             record = capture_record(step=step, url=url, request_body=body, response=response, secret=key)
             (OUT / f"{step.name}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             cost = _cost(response.text)
-            spent += cost or Decimal("0")
+            # missing usage.cost counts as the conservative per-request reserve, so the 0.20 USD cap still holds
+            spent += cost if cost is not None else RESERVE_USD
             print(f"  {i}. {step.name}: HTTP {response.status_code}, usage.cost={cost}")
             if response.status_code != 200:
                 print("  Odpowiedź ≠ 200 — przerywam (zachowanie jak bezpiecznik, ADR-003 §3.5).")

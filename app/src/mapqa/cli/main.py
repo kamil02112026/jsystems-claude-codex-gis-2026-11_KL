@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from collections.abc import Callable
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -168,6 +169,17 @@ def validate_run_args(args: argparse.Namespace) -> tuple[Bbox | None, list[str]]
         raise ValidationError("Zestaw photos będzie dostępny od przyrostu P1", code="dataset_not_available", hint="Użyj --dataset signs")
     if args.model and args.no_model:
         raise ValidationError("Flagi --model i --no-model wykluczają się", code="invalid_flags")
+    for name in ("max_queries", "max_images"):
+        value = getattr(args, name)
+        if value is not None and value < 0:
+            raise ValidationError(f"--{name.replace('_', '-')} musi być liczbą ≥ 0", code="invalid_limits")
+    if args.max_usd is not None:
+        try:
+            usd = Decimal(args.max_usd)
+        except InvalidOperation:
+            raise ValidationError("--max-usd musi być kwotą, np. 1.00", code="invalid_limits") from None
+        if not usd.is_finite() or usd < 0:
+            raise ValidationError("--max-usd musi być kwotą ≥ 0", code="invalid_limits")
     return bbox, attributes
 
 
@@ -188,7 +200,7 @@ def _cmd_eval(args: argparse.Namespace) -> tuple[dict[str, Any], list[str], int]
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
-    wants_json = "json" in argv and "--output" in argv
+    wants_json = "--output=json" in argv or any(a == "--output" and b == "json" for a, b in zip(argv, argv[1:]))
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:  # --help / --version
@@ -233,4 +245,9 @@ def main(argv: list[str] | None = None) -> int:
             return _emit(output, env, text_summary)
     except MapQAError as exc:
         return _emit(output, _error(command, exc), None)
+    except Exception as exc:  # last resort: still one JSON envelope for agents (TAC-02), no secrets in type name
+        env = Envelope(
+            ok=False, command=command, exit_code=1, error=ErrorInfo(code="internal_error", message=f"Nieoczekiwany błąd: {type(exc).__name__}")
+        )
+        return _emit(output, env, None)
     return 1  # pragma: no cover

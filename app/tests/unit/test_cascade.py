@@ -227,6 +227,19 @@ def test_budget_refusal_level2_is_budget_exceeded(tmp_path, cache):
     assert len(port.calls) == 1
 
 
+def test_port_transport_error_is_model_unavailable_and_opens_breaker(tmp_path, cache):
+    """Review #4: a transport/timeout error raised by the port must not escalate to L2 (ADR-003 §3.4, §3.5)."""
+    from mapqa.cascade.ports import PortTransportError
+
+    port = FakePort(l1=[PortTransportError("timeout")], l2=[ok("50", 0.9)])
+    cascade, budget, _ = make(tmp_path, cache, port)
+    r = resolve(cascade)
+    assert r.final_status == "model_unavailable"
+    assert [c["level"] for c in port.calls] == [1]
+    assert r.attempts[0].error_class == "timeout"
+    assert budget.circuit_open
+
+
 def test_port_exception_becomes_invalid_response_and_run_continues(tmp_path, cache):
     port = FakePort(l1=[ValueError("boom")], l2=[ok("50", 0.9)])
     cascade, _, _ = make(tmp_path, cache, port)
