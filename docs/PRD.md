@@ -17,7 +17,7 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
 
 - Raport z jednego uruchomienia da się przejrzeć w ≤ 30 min i każdy kandydat ma czytelny powód skierowania.
 - Odczyt modelu spełnia progi jakości z sekcji 7 na etykietach `certain`.
-- Uruchomienie mieści się w budżecie: ≤ 1 USD i ≤ 200 zapytań do modelu.
+- Uruchomienie mieści się w budżecie: ≤ 1 USD, ≤ 100 zapytań do modelu i ≤ 25 nowych obrazów.
 
 ## 2. Użytkownik
 
@@ -109,10 +109,10 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
 
 ```
 poziom 1: model decyzyjny ──pewny──► odczyt
-     │ niepewny / błąd / niepoprawna odpowiedź
+     │ niepewny / niepoprawna odpowiedź        (błąd API → model_unavailable → poziom 3)
      ▼
 poziom 2: zwykły LLM (reasoning medium) ──pewny──► odczyt
-     │ niepewny / błąd / niepoprawna odpowiedź
+     │ niepewny / błąd API / niepoprawna odpowiedź
      ▼
 poziom 3: człowiek ──► kolejka ręcznej weryfikacji (F6)
 ```
@@ -123,13 +123,13 @@ poziom 3: człowiek ──► kolejka ręcznej weryfikacji (F6)
   - nawierzchnia: `utwardzona`, `nieutwardzona`, `nie widać`;
   - oświetlenie: `tak`, `nie`, `nie widać`.
 - F5.3 Model zwraca odpowiedź i prawdopodobieństwo (0–1). Odpowiedź spoza listy lub niepoprawny format daje `invalid_response`.
-- F5.4 **Poziom 1 → 2:** pytanie przechodzi do zwykłego LLM, gdy model decyzyjny zwróci prawdopodobieństwo poniżej progu (domyślnie **0,8**), `invalid_response` albo `model_unavailable` (błąd API, timeout). Odpowiedzi `nie widać` i `nieczytelny` z prawdopodobieństwem ≥ progu są **pewnymi odczytami**, nie powodem eskalacji.
-- F5.5 **Poziom 2 → 3:** gdy zwykły LLM również zwróci wynik poniżej swojego progu (domyślnie **0,8**), `invalid_response` lub `model_unavailable`, końcowy status to `abstain` (albo `model_unavailable`, jeśli oba poziomy były niedostępne). Przypadek trafia do **kolejki ręcznej weryfikacji** (F6.5).
+- F5.4 **Poziom 1 → 2:** pytanie przechodzi do zwykłego LLM, gdy model decyzyjny zwróci prawdopodobieństwo poniżej progu (domyślnie **0,8**) albo `invalid_response`. Odpowiedź modelu decyzyjnego jest poprawna tylko, gdy `probabilities` zawiera wszystkie opcje, suma mieści się w [0,99; 1,01], a pewność to `max(probabilities)` (przyjęte za wersją referencyjną prowadzącego). **Błąd API** (kod HTTP ≠ 200, timeout 60 s, błąd połączenia) daje `model_unavailable` i **nie** powoduje eskalacji: zatrzymuje dalsze płatne wywołania w tym uruchomieniu (bezpiecznik), a bieżące i pozostałe pytania bez cache dostają `model_unavailable` i trafiają do kolejki ręcznej; raport nadal powstaje (przyjęte za wersją referencyjną prowadzącego). Odpowiedzi `nie widać` i `nieczytelny` z prawdopodobieństwem ≥ progu są **pewnymi odczytami**, nie powodem eskalacji.
+- F5.5 **Poziom 2 → 3:** gdy zwykły LLM również zwróci wynik poniżej swojego progu (domyślnie **0,8**), `invalid_response` lub `model_unavailable`, końcowy status to `abstain` (albo `model_unavailable` przy błędzie API na którymkolwiek poziomie). Przypadek trafia do **kolejki ręcznej weryfikacji** (F6.5).
 - F5.6 Progi są konfigurowalne osobno dla każdego poziomu, **modelu** i atrybutu (`thresholds.<poziom>.<model>.<atrybut>`). Prawdopodobieństwa różnych modeli nie są porównywalne, więc zamiana modelu poziomu 1 (`typesafe/jev-1.14` ↔ `openai/gpt-6-luna-decisions`) nie używa progu skalibrowanego dla drugiego modelu; brak progu dla wybranego modelu = domyślne 0,8 z ostrzeżeniem w raporcie (przyjęte za wersją referencyjną prowadzącego). Model poziomu 1 oraz model i `reasoning effort` poziomu 2 są konfigurowalne.
 - F5.6a Przed wysłaniem obraz jest przygotowany raz i ten sam trafia do wszystkich modeli i poziomów: obrót według EXIF, skala 256–1568 px na bok (limity Jev), JPEG bez metadanych. Obraz, którego nie da się zmieścić w limitach, dostaje status `image_out_of_bounds` i trafia do kolejki ręcznej bez zapytania do modelu (ADR-003 §3.2).
 - F5.7 Każdy wynik zapisuje **ścieżkę kaskady**: odpowiedź i prawdopodobieństwo z każdego wywołanego poziomu, poziom rozstrzygający (`1`, `2` albo `human`) i powód eskalacji. Jedno nieudane zdjęcie nie przerywa uruchomienia.
 - F5.8 **Cache** po `sha256(obraz) + id pytania + model + reasoning effort + wersja promptu`, osobno dla każdego poziomu. Trafienie w cache nie liczy się do limitu zapytań ani kosztu.
-- F5.9 **Limity na uruchomienie:** domyślnie 200 zapytań i 1,00 USD **łącznie dla obu poziomów**. Po osiągnięciu limitu kolejne pytania dostają `budget_exceeded` i trafiają do kolejki ręcznej; raport nadal powstaje.
+- F5.9 **Limity na uruchomienie** (przyjęte za wersją referencyjną prowadzącego): domyślnie 100 zapytań, 25 obrazów z nowymi zapytaniami i 1,00 USD **łącznie dla obu poziomów i modelu porównawczego**. Przed każdym zapytaniem rezerwujemy koszt (poziom 1: 0,02 USD, poziom 2: 0,04 USD, model porównawczy: 0,02 USD); zapytanie, które mogłoby przekroczyć limit, nie jest wysyłane. Zapytanie zakończone błędem liczy się do limitu z pełną rezerwacją. Po osiągnięciu limitu kolejne pytania dostają `budget_exceeded` i trafiają do kolejki ręcznej; raport nadal powstaje. Trafienia w cache nie zużywają żadnego limitu, więc większy zbiór obrazów można przetworzyć kolejnymi uruchomieniami.
 - F5.10 **Log kosztów** (JSONL): czas, poziom, model, reasoning effort, id pytania, hash obrazu, tokeny, koszt, cache hit/miss, status. Bez sekretów i bez treści obrazu.
 - F5.11 Tryb porównawczy uruchamia drugi model decyzyjny (domyślnie `openai/gpt-6-luna-decisions`) na zestawie ewaluacyjnym poza kaskadą, w ramach wspólnego budżetu.
 
@@ -198,7 +198,7 @@ Cel: analityk **albo agent AI korzystający z narzędzia** może wskazać, skąd
   - `mapqa sources check [--source X]` — test połączenia i liczności tabel w bbox;
   - `--output json` dla wszystkich poleceń — wynik maszynowy dla agenta;
   - `--model --yes` — jawne włączenie płatnego odczytu i potwierdzenie bez interakcji (F1.4); bez `--model` agent nigdy nie wywołuje płatnego API;
-  - stałe kody wyjścia: `0` sukces, `1` błąd danych lub walidacji, `2` źródło niedostępne lub brak uprawnień, `3` przekroczony budżet modelu.
+  - stałe kody wyjścia: `0` sukces, `1` błąd danych lub walidacji, `2` źródło niedostępne lub brak uprawnień, `3` uruchomienie zakończone z raportem, ale odczyt modelem niepełny (przekroczony budżet modelu albo przerwanie po błędzie API).
 - F8.10 Wynik `--no-model` z tych samych danych jest identyczny dla źródeł `files` i `databricks` (te same kandydaci rozbieżności i liczności), z wyjątkiem pól metadanych źródła.
 
 ## 6. Wymagania niefunkcjonalne
@@ -253,7 +253,7 @@ Z kilkunastu pełnych kadrów z prędkością nie wyciągamy wniosków o kalibra
 
 ### Koszt
 
-- Jedno pełne uruchomienie ewaluacji (wszystkie etykiety `certain`, kaskada poziom 1 + 2, zimny cache): **≤ 1,00 USD i ≤ 200 zapytań łącznie**. Gdy pytań jest więcej niż limit, ewaluacja używa deterministycznej próbki (stały seed) i raportuje jej wielkość.
+- Jedno pełne uruchomienie ewaluacji (wszystkie etykiety `certain`, kaskada poziom 1 + 2, zimny cache): **≤ 1,00 USD, ≤ 100 zapytań i ≤ 25 nowych obrazów łącznie**. Gdy pytań lub obrazów jest więcej niż limit, ewaluacja używa deterministycznej próbki (stały seed) i raportuje jej wielkość.
 - Raport podaje koszt całkowity, koszt każdego poziomu, koszt na zapytanie i koszt na kandydata.
 
 ## 8. Kryteria akceptacji
@@ -266,12 +266,12 @@ Z kilkunastu pełnych kadrów z prędkością nie wyciągamy wniosków o kalibra
 6. **Izolacja modelu:** test sprawdza, że żądanie do modelu zawiera tylko obraz i tekst pytania z listy (brak tagów, etykiet, identyfikatorów, nazw plików).
 7. **Kaskada:** test z zamockowanym API:
    - poziom 1 pewny → poziom 2 nie jest wywoływany;
-   - poziom 1 poniżej progu, `invalid_response` lub błąd HTTP/timeout → wywołany poziom 2, a wynik ma poziom rozstrzygający `2`;
+   - poziom 1 poniżej progu albo `invalid_response` (w tym `probabilities` bez wszystkich opcji lub z sumą poza [0,99; 1,01]) → wywołany poziom 2, a wynik ma poziom rozstrzygający `2`;
    - oba poziomy poniżej progu → `abstain`, pozycja `nierozstrzygnięty_odczyt` w `manual_queue.csv`;
-   - oba poziomy niedostępne → `model_unavailable` i pozycja w kolejce;
+   - błąd HTTP/timeout na poziomie 1 → `model_unavailable`, poziom 2 **nie** jest wywoływany, kolejne pytania bez cache nie generują zapytań (`model_unavailable`), wszystkie mają pozycje w kolejce, kod wyjścia `3`;
    - żądanie do poziomu 2 nie zawiera odpowiedzi poziomu 1.
    Uruchomienie kończy się raportem.
-8. **Cache:** drugie uruchomienie z tymi samymi parametrami ma 0 nowych zapytań i koszt 0 USD w logu.
+8. **Cache:** drugie uruchomienie z tymi samymi parametrami (po pierwszym bez `budget_exceeded` i bez błędu API) ma 0 nowych zapytań i koszt 0 USD w logu.
 9. **Budżet:** przy limicie 5 zapytań wykonanych jest ≤ 5 zapytań łącznie na obu poziomach, pozostałe pytania mają `budget_exceeded` i trafiają do kolejki ręcznej, a raport powstaje.
 10. **Raport:** `report.md` i `report.html` zawierają lejek kaskady oraz co najmniej jednego kandydata dla każdego wybranego atrybutu (jeśli dane go dają), z miniaturą, atrybucją, wartością mapy, odczytem z prawdopodobieństwem, poziomem rozstrzygającym i powodem.
 11. **Ewaluacja:** raport pokazuje trafność, odsetek eskalacji, odsetek przekazania człowiekowi i pokrycie per pytanie (kaskada i każdy poziom osobno) z mianownikami i liczbą wykluczonych `uncertain`; nawierzchnia ma adnotację o braku klasy `unpaved`.
@@ -328,7 +328,7 @@ Sekcje 3–8 opisują docelowe v1. Pierwszy etap (**MVP**) ma jak najszybciej ur
 ### Kryteria akceptacji MVP
 
 - Kryteria 5–9, 12–15, 19 i 20 z sekcji 8 oraz 10–11 w zakresie prędkości (raport Markdown zamiast HTML). Kryteria 1–4 i 16–18 przechodzą do przyrostu 1.
-- Uruchomienie MVP na 119 wycinkach mieści się w budżecie 1 USD i 200 zapytań (poziom 2 tylko dla eskalowanych pytań; drugie uruchomienie z cache = 0 zapytań).
+- Każde uruchomienie MVP mieści się w budżecie 1 USD, 100 zapytań i 25 nowych obrazów (poziom 2 tylko dla eskalowanych pytań). Pełne 119 wycinków jest przetwarzane kolejnymi uruchomieniami na ciepłym cache albo z jawnie podniesionymi limitami pokazanymi w manifeście; uruchomienie po pokryciu wszystkich wycinków = 0 zapytań.
 - Raport pokazuje, ile z 46 rozbieżności znak ↔ OSM model potwierdził odczytem, ile poszło do człowieka i dlaczego.
 - Trafność i odsetek przekazania człowiekowi są podane osobno dla znaków liczbowych i negatywów `none`, obok wyniku detektora Mapillary na tych samych zdjęciach.
 
@@ -342,7 +342,7 @@ Sekcje 3–8 opisują docelowe v1. Pierwszy etap (**MVP**) ma jak najszybciej ur
 | Znak dotyczy innej jezdni / kierunku | Fałszywy kandydat | Flagi połączenia, priorytet `średni` przy flagach |
 | Wygasające URL Mapillary | Brak zdjęć | Zdjęcia offline i lokalne pliki; brak pliku = odrzucony rekord |
 | Brak klasy `unpaved` w etykietach | Nawierzchnia nieoceniona | Brak progu akceptacji do czasu dodania etykiet |
-| Dostępność modeli OpenRouter | Brak odczytów | Eskalacja do poziomu 2, `model_unavailable` → kolejka ręczna, tryb `--no-model`, cache |
+| Dostępność modeli OpenRouter | Brak odczytów | Bezpiecznik po pierwszym błędzie API (bez ponowień i bez eskalacji), `model_unavailable` → kolejka ręczna, tryb bez modelu, cache; uzupełnienie kolejnym uruchomieniem |
 | Poziom 2 „zgaduje” z wysoką deklarowaną pewnością | Błędne odczyty zamiast przekazania człowiekowi | Osobna trafność poziomu 2 na eskalowanych pytaniach, próg z kalibracji, priorytet `średni` dla odczytów z poziomu 2 |
 | Eskalacja zjada budżet | Mniej zdjęć przeanalizowanych | Wspólny limit, koszt per poziom w logu i raporcie |
 

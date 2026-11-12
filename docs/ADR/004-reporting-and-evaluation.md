@@ -92,7 +92,7 @@ Sekcje `report.md` w tej kolejności (nagłówki po polsku):
 5. **Kolejka ręcznej weryfikacji** — wiersze jak w F7.3: drogi (OSM way z linkiem `https://www.openstreetmap.org/way/<id>`, Overture id), miniatura (`thumbs/…`) z atrybucją (autor, licencja, link źródłowy), data zdjęcia, wartości surowe i znormalizowane, odczyt z pewnością i poziomem (przy eskalacji także odpowiedź poziomu 1), flagi, powód. Dla > 200 pozycji raport pokazuje pierwsze 200 i odsyła do CSV.
 6. **Rozbieżności znak ↔ OSM (MVP)** — liczba par z etykietą `certain` różną od OSM (oczekiwane 46 na danych kursu) i ich rozkład: potwierdzone pewnym odczytem modelu, przekazane człowiekowi (z przyczyną), odczytane inaczej niż etykieta.
 7. **Ewaluacja** — metryki §3.8, z mianownikami i liczbą wykluczonych `uncertain`; adnotacja dla nawierzchni o braku klasy `unpaved`.
-8. **Koszt** — całkowity, per poziom, na zapytanie, na kandydata; liczba trafień cache; oznaczenie kosztów szacowanych.
+8. **Koszt** — całkowity, per poziom, na zapytanie, na kandydata; liczba trafień cache; oznaczenie kosztów szacowanych; zużycie limitów (`queries_used`/`max_queries`, `images_used`/`max_images`, USD); przy otwartym bezpieczniku podsekcja „Odczyt przerwany: błąd API” z kodem błędu i liczbą pytań `circuit_open`.
 9. **Licencje i atrybucja** — OSM i Overture: ODbL 1.0; zdjęcia: CC BY-SA 4.0 z autorem i linkiem przy każdej miniaturze; tekst zgodny z `ATTRIBUTION.md`; zastrzeżenie: „Kandydat nie oznacza błędu mapy; decyzję podejmuje człowiek.”
 
 `report.html` [P4] — te same sekcje z tego samego modelu widoku, samodzielny plik (CSS w `<style>`, miniatury osadzone jako `data:image/jpeg;base64`), bez zewnętrznych zasobów i skryptów.
@@ -103,7 +103,7 @@ Determinizm: poza `run_id` i czasami w sekcji 1 raport nie zawiera znaczników c
 
 - Jednostka podziału: `sequence` (PRD §7). Przypisanie: `int(sha256(f"{seed}|{sequence}")[:8], 16) % 100 < 50` → `calibration`, inaczej `test`. Domyślny `seed = "mapqa-2026-11"`, zapisany w `run.json`.
 - Raport podaje liczby sekwencji i etykiet `certain` w każdej części oraz rozkład klas (liczby vs `none`).
-- Próbka przy przekroczeniu limitu (PRD §7 „Koszt”): gdy szacowana liczba zapytań (pytania × 1 + oczekiwane eskalacje 30%) > `max_queries`, ewaluacja losuje deterministycznie (ten sam `seed`) podzbiór sekwencji i raportuje jego wielkość.
+- Próbka przy przekroczeniu limitu (PRD §7 „Koszt”): gdy szacowana liczba zapytań (pytania × 1 + oczekiwane eskalacje 30%) > `max_queries` (100) albo liczba obrazów bez cache > `max_images` (25), ewaluacja losuje deterministycznie (ten sam `seed`) podzbiór sekwencji i raportuje jego wielkość.
 
 ### 3.8 Metryki (PRD §7, ADR-000 D10-I4)
 
@@ -291,7 +291,7 @@ sequenceDiagram
 | EVL-04 nawierzchnia | Unit | 99 × `paved` | adnotacja `no_negative_class`, `passed = null` | — |
 | CAL-01 wybór progu | Unit | syntetyczne pasma pewności | najniższy próg z trafnością ≥ 0,90 i n ≥ 10 | brak progu → 1,00 + ostrzeżenie |
 | E2E-01 tryb bez modelu | E2E | `mapqa run --dataset signs` (bez `--model`) | raport, CSV, lejek z `skipped_no_model`, „Odczyt modelem nie był uruchomiony”, 0 żądań, kod 0 | `--no-model` daje bajtowo ten sam `manual_queue.csv` |
-| E2E-02 płatny MVP | E2E `paid` | `mapqa run --model --yes`, 119 wycinków | sekcja „Rozbieżności znak ↔ OSM” z 46 parami; metryki osobno dla liczb i `none` obok detektora | — |
+| E2E-02 płatny MVP | E2E `paid` | `mapqa run --model --yes`, 119 wycinków w kolejnych runach na ciepłym cache (≤ 25 nowych obrazów i ≤ 100 zapytań na run) | sekcja „Rozbieżności znak ↔ OSM” z 46 parami; metryki osobno dla liczb i `none` obok detektora | — |
 
 ### Techniczne kryteria akceptacji
 
