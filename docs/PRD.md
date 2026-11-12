@@ -36,10 +36,17 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
 - Interfejs: **CLI** + raport **Markdown i HTML**.
 - Źródła danych: pliki lokalne (`course-materials/exercise-data/map-qa/`) albo Databricks (`workspace.map_qa`).
 - Modele (OpenRouter), w **kaskadzie eskalacji** (F5):
-  - poziom 1 — model decyzyjny `openai/gpt-6-luna-decisions`;
+  - poziom 1 — model decyzyjny, domyślnie `typesafe/jev-1.14` (`DECISION_MODEL` z `.env.example`); alternatywa `openai/gpt-6-luna-decisions` wybierana konfiguracją;
   - poziom 2 — zwykły model LLM ze średnim poziomem rozumowania, domyślnie `openai/gpt-6-luna` (`LLM_MODEL` z `.env.example`), `reasoning effort = medium`;
   - poziom 3 — człowiek: **kolejka ręcznej weryfikacji**;
-  - model porównawczy `typesafe/jev-1.14` (tylko ewaluacja, poza kaskadą).
+  - model porównawczy: drugi model decyzyjny, domyślnie `openai/gpt-6-luna-decisions` (tylko ewaluacja, poza kaskadą).
+- Wybór modeli i ceny według prowadzącego (12.11.2026, [strona Jev](https://openrouter.ai/typesafe/jev-1.14)). Wszystkie trzy modele przyjmują obrazy:
+
+  | Model | Rola | Wejście / wyjście (USD za 1 mln tokenów) | Kontekst |
+  |---|---|---|---|
+  | `typesafe/jev-1.14` | poziom 1 (domyślny) | 0,042 / 0 | 262K |
+  | `openai/gpt-6-luna-decisions` | alternatywa poziomu 1, model porównawczy | 0,10 / 0 | 1,1M |
+  | `openai/gpt-6-luna` | poziom 2 | do potwierdzenia nagraniem (`usage.cost`) | — |
 
 ### Poza zakresem v1 (później)
 
@@ -114,12 +121,12 @@ poziom 3: człowiek ──► kolejka ręcznej weryfikacji (F6)
 - F5.3 Model zwraca odpowiedź i prawdopodobieństwo (0–1). Odpowiedź spoza listy lub niepoprawny format daje `invalid_response`.
 - F5.4 **Poziom 1 → 2:** pytanie przechodzi do zwykłego LLM, gdy model decyzyjny zwróci prawdopodobieństwo poniżej progu (domyślnie **0,8**), `invalid_response` albo `model_unavailable` (błąd API, timeout). Odpowiedzi `nie widać` i `nieczytelny` z prawdopodobieństwem ≥ progu są **pewnymi odczytami**, nie powodem eskalacji.
 - F5.5 **Poziom 2 → 3:** gdy zwykły LLM również zwróci wynik poniżej swojego progu (domyślnie **0,8**), `invalid_response` lub `model_unavailable`, końcowy status to `abstain` (albo `model_unavailable`, jeśli oba poziomy były niedostępne). Przypadek trafia do **kolejki ręcznej weryfikacji** (F6.5).
-- F5.6 Progi są konfigurowalne osobno dla każdego poziomu i atrybutu. Model i `reasoning effort` poziomu 2 są konfigurowalne.
+- F5.6 Progi są konfigurowalne osobno dla każdego poziomu i atrybutu. Model poziomu 1 oraz model i `reasoning effort` poziomu 2 są konfigurowalne.
 - F5.7 Każdy wynik zapisuje **ścieżkę kaskady**: odpowiedź i prawdopodobieństwo z każdego wywołanego poziomu, poziom rozstrzygający (`1`, `2` albo `human`) i powód eskalacji. Jedno nieudane zdjęcie nie przerywa uruchomienia.
 - F5.8 **Cache** po `sha256(obraz) + id pytania + model + reasoning effort + wersja promptu`, osobno dla każdego poziomu. Trafienie w cache nie liczy się do limitu zapytań ani kosztu.
 - F5.9 **Limity na uruchomienie:** domyślnie 200 zapytań i 1,00 USD **łącznie dla obu poziomów**. Po osiągnięciu limitu kolejne pytania dostają `budget_exceeded` i trafiają do kolejki ręcznej; raport nadal powstaje.
 - F5.10 **Log kosztów** (JSONL): czas, poziom, model, reasoning effort, id pytania, hash obrazu, tokeny, koszt, cache hit/miss, status. Bez sekretów i bez treści obrazu.
-- F5.11 Tryb porównawczy uruchamia model `typesafe/jev-1.14` na zestawie ewaluacyjnym poza kaskadą, w ramach wspólnego budżetu.
+- F5.11 Tryb porównawczy uruchamia drugi model decyzyjny (domyślnie `openai/gpt-6-luna-decisions`) na zestawie ewaluacyjnym poza kaskadą, w ramach wspólnego budżetu.
 
 ### F6. Zestawienie, kandydaci i kolejka ręcznej weryfikacji
 
@@ -307,7 +314,7 @@ Sekcje 3–8 opisują docelowe v1. Pierwszy etap (**MVP**) ma jak najszybciej ur
 1. **Przyrost 1 — Databricks i własne dopasowanie:** adapter `databricks` (REST, potem CLI), filtr bbox w SQL, profil danych z 561 zdjęć (F2), własne łączenie w EPSG:2180 i porównanie z `photo_road_links.csv` (F3), test zgodności `files` ↔ `databricks` (kryteria 16–18). Prędkość na pełnych kadrach `photos.csv`.
 2. **Przyrost 2 — oświetlenie:** pobranie zdjęć `download_photos.py`, pytanie o lampę, OSM `lit`, ewaluacja na 79 etykietach `certain`.
 3. **Przyrost 3 — Overture:** porównanie z `speed_limits` (reguły `when`/`between`), źródła i daty Overture (F4.1, F4.3, F4.4).
-4. **Przyrost 4 — raport HTML z miniaturami** i model porównawczy `typesafe/jev-1.14` (F7.1, F5.11).
+4. **Przyrost 4 — raport HTML z miniaturami** i model porównawczy `openai/gpt-6-luna-decisions` (F7.1, F5.11).
 5. **Przyrost 5 — nawierzchnia:** po dodaniu etykiet `unpaved`.
 6. **Później:** interfejs użytkownika (dashboard), zapis decyzji, eksport do Jira, serwer MCP narzędzia.
 
@@ -335,5 +342,4 @@ Sekcje 3–8 opisują docelowe v1. Pierwszy etap (**MVP**) ma jak najszybciej ur
 ## 11. Otwarte pytania
 
 - Czy progi pewności 0,8 (poziom 1 i 2) utrzymać wspólne, czy kalibrować osobno per poziom i atrybut po pierwszej próbie?
-- Czy `openai/gpt-6-luna` z `reasoning effort = medium` to docelowy „zwykły” model poziomu 2, czy wybieramy inny?
 - Kto i jak doda etykiety `unpaved`, aby objąć nawierzchnię progiem akceptacji?

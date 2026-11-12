@@ -51,7 +51,7 @@ Wersje sprawdzone 2026-11-03 (`pip index versions`, PyPI). Identyfikatory Contex
 
 **Zasada przypinania:** wersje powyżej wpisujemy jako dokładne (`==`) w `app/pyproject.toml` i zatwierdzamy `uv.lock`. Jeśli `uv lock` nie znajdzie spójnego zestawu (np. pandas 3.1.0 z geopandas 1.2.0), implementujący agent obniża **jedną** bibliotekę do najnowszej zgodnej wersji, zapisuje przyczynę w sekcji „Odchylenia od ADR” w opisie PR i aktualizuje tę tabelę.
 
-**Fakty niezweryfikowane (2026-11-03):** strony modeli `openrouter.ai/openai/gpt-6-luna-decisions` i `openrouter.ai/typesafe/jev-1.14` zwracały HTTP 404 — brak potwierdzonego cennika i opóźnień. Znana jest tylko cena `typesafe/jev-1.13`: 0,042 USD / mln tokenów wejścia, wyjście bez opłat (cookbook OpenRouter „jev-classification”). Koszt każdego zapytania odczytujemy z `usage.cost` odpowiedzi (ADR-003).
+**Ceny modeli (prowadzący, 12.11.2026):** `typesafe/jev-1.14` 0,042 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 262K; `openai/gpt-6-luna-decisions` 0,10 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 1,1M. Cena `openai/gpt-6-luna` i opóźnienia wszystkich modeli są niepotwierdzone. Koszt każdego zapytania odczytujemy z `usage.cost` odpowiedzi (ADR-003).
 
 ---
 
@@ -196,6 +196,7 @@ Polecenia `eval` korzystają z tej samej kaskady, cache i budżetu co `run` (ADR
 | Zmienna | Cel | Wymagana | Przykład |
 |---|---|---|---|
 | `OPENROUTER_API_KEY` | Klucz OpenRouter (poziom 1, 2, model porównawczy) | Tak, gdy run wywołuje modele; nie przy `--no-model` | `sk-or-…` (nigdy w repo) |
+| `DECISION_MODEL` | Domyślny model decyzyjny poziomu 1, jeśli nie ustawiono go w konfiguracji/flagą (D9) | Nie | `typesafe/jev-1.14` |
 | `LLM_MODEL` | Domyślny model poziomu 2, jeśli nie ustawiono go w konfiguracji/flagą | Nie | `openai/gpt-6-luna` |
 | `MAPQA_SOURCE` | Wybór źródła (precedencja F8.1 poz. 2) | Nie | `course-databricks` |
 | `MAPQA_CONFIG` | Ścieżka pliku konfiguracyjnego | Nie | `C:\work\mapqa.toml` |
@@ -316,18 +317,19 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 - (-) Pełny run na zimnym cache trwa dłużej (szacunek: 119 × 1–3 s ≈ 2–6 min dla poziomu 1).
 **Warunek rewizji:** Gdy zimny run przekroczy 15 min albo liczba zdjęć wzrośnie > 1000.
 
-### D9. Model decyzyjny poziomu 1: `openai/gpt-6-luna-decisions`; `typesafe/jev-1.14` jako porównawczy
+### D9. Model decyzyjny poziomu 1: `typesafe/jev-1.14`; `openai/gpt-6-luna-decisions` jako alternatywa i model porównawczy
 **Status:** Accepted
-**Data:** 2026-11-03
-**Kontekst:** PRD §3 ustala poziom 1 = `openai/gpt-6-luna-decisions`, porównawczy = `typesafe/jev-1.14`. Oba są na liście modeli Decisions przyjmujących obrazy (OpenRouter „Multimodal Decisions”). Cennik i opóźnienia obu modeli nie są publicznie potwierdzone (HTTP 404 stron modeli, 2026-11-03).
-**Decyzja:** Zgodnie z PRD. Pytania jako typ `choice` (prędkość: 14 opcji; nawierzchnia, oświetlenie: 3 opcje), pewność = `confidence` z odpowiedzi (ADR-003). Przed implementacją klienta wykonujemy nagranie jednej prawdziwej odpowiedzi każdego modelu (ADR-003 D-003-6), które ustala realny koszt na zapytanie.
+**Data:** 2026-11-03, zmieniona 2026-11-12
+**Kontekst:** Pierwotnie (2026-11-03) poziom 1 = `openai/gpt-6-luna-decisions`, a `typesafe/jev-1.14` służył tylko do porównań, bo cennik obu modeli był niepotwierdzony (strony modeli zwracały HTTP 404). 12.11.2026 prowadzący wskazał `typesafe/jev-1.14` jako model decyzyjny, a `openai/gpt-6-luna-decisions` jako opcjonalną alternatywę. Podał też ceny: Jev 0,042 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 262K; Luna decisions 0,10 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 1,1M. Oba modele przyjmują obrazy (OpenRouter „Multimodal Decisions”).
+**Decyzja:** Poziom 1 = `typesafe/jev-1.14` (PRD §3), model wybierany konfiguracją: `models.level1` > `DECISION_MODEL` > domyślny. Tryb porównawczy (F5.11) domyślnie uruchamia `openai/gpt-6-luna-decisions`. Pytania jako typ `choice` (prędkość: 14 opcji; nawierzchnia, oświetlenie: 3 opcje), pewność = `confidence` z odpowiedzi (ADR-003). Przed implementacją klienta nagrywamy jedną prawdziwą odpowiedź każdego modelu (ADR-003 D-003-6). Nagranie potwierdza realny koszt zapytania z obrazem i format odpowiedzi.
 **Odrzucone alternatywy:**
-- `typesafe/jev-1.14` na poziomie 1: tańszy (jev-1.13: 0,042 USD/mln tokenów wejścia), ale PRD wyznacza go do ewaluacji porównawczej; zamiana wymaga danych z kalibracji.
+- `openai/gpt-6-luna-decisions` na poziomie 1 jako domyślny: ~2,4× droższe wejście (obrazy to głównie tokeny wejścia), a prowadzący wskazał Jev. Pozostaje dostępny przez konfigurację.
 - Typ pytania `noul` dla oświetlenia: nie obsługuje trzeciej odpowiedzi `nie widać` wymaganej przez F5.2.
 **Konsekwencje:**
 - (+) Jednolity kontrakt dla wszystkich atrybutów (`choice`).
-- (-) Niepewny koszt do czasu nagrania; budżet chroni rezerwacja (ADR-003).
-**Warunek rewizji:** Gdy na zbiorze kalibracyjnym `jev-1.14` osiągnie trafność ≥ poziomu 1 przy ≤ 50% kosztu — zamiana modeli poziomu 1 (nowy wpis ADR).
+- (+) Niższy koszt poziomu 1. Oba modele decyzyjne mają ten sam kontrakt Decisions API, więc zamiana to tylko zmiana konfiguracji.
+- (-) Ceny pochodzą od prowadzącego, a nie z nagrania. Do czasu nagrania budżet chroni rezerwacja (ADR-003).
+**Warunek rewizji:** Gdy na zbiorze kalibracyjnym `openai/gpt-6-luna-decisions` osiągnie trafność wyższą o ≥ 5 p.p. przy akceptowalnym koszcie albo Jev wyraźnie częściej eskaluje do poziomu 2. Wtedy domyślny model poziomu 1 się zmienia (nowy wpis ADR).
 
 ### D10. Techniczne interpretacje niejednoznaczności PRD (do zatwierdzenia w PRD)
 **Status:** Proposed — obowiązuje implementację, dopóki PRD nie zostanie zaktualizowany inaczej
@@ -338,7 +340,7 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 - **I2 — bbox a zestaw `signs/` (§9):** 24 ze 119 wycinków leży poza bbox Krakowa (Warszawa, Poznań, Gdańsk, Wrocław, Łódź). Dla `--dataset signs` bbox domyślnie nie filtruje; jawne `--bbox` filtruje jak zwykle. Dzięki temu ewaluacja MVP obejmuje 115 etykiet `certain`.
 - **I3 — priorytet `niski` (F6.3):** dodajemy regułę `sources_only`: OSM i Overture się różnią, a kaskada nie dała pewnego odczytu wartości → kandydat `niski`. Aktywna od [P3] (porównanie z Overture).
 - **I4 — odsetek przekazania człowiekowi (§7):** licznik = pytania z etykietą `certain` i końcowym statusem `abstain`, `model_unavailable` albo `budget_exceeded`, niezależnie od tego, czy powstała pozycja kolejki. „Wynik ma znaczenie” (F6.5) = zdjęcie ma połączenie z drogą OSM (`osm_way_id` nie null) — tylko wtedy powstaje pozycja `nierozstrzygnięty_odczyt`.
-- **I5 — budżet a model porównawczy (F5.9 vs F5.11):** wywołania `typesafe/jev-1.14` w trybie porównawczym liczą się do wspólnego limitu runu. Tryb porównawczy jest domyślnie wyłączony; kryterium 9 testujemy bez niego.
+- **I5 — budżet a model porównawczy (F5.9 vs F5.11):** wywołania modelu porównawczego (domyślnie `openai/gpt-6-luna-decisions`) liczą się do wspólnego limitu runu. Tryb porównawczy jest domyślnie wyłączony; kryterium 9 testujemy bez niego.
 - **I6 — kod `3` (F8.9 vs F5.9):** kod 3 oznacza run zakończony z raportem i co najmniej jednym `budget_exceeded` (§6).
 - **I7 — nazwy a typy źródeł (F1.3, F8.1):** zawsze istnieje wbudowane źródło o **nazwie** `files` (typ `files`, `path` = katalog danych kursu), chyba że plik konfiguracyjny definiuje własne źródło o tej nazwie. `databricks` nie jest nazwą wbudowaną — źródło Databricks istnieje tylko jako wpis w konfiguracji (np. `course-databricks`). `--source databricks` bez takiego wpisu = `unknown_source`, kod 1.
 **Odrzucone alternatywy:**

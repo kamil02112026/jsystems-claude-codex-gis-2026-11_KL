@@ -37,7 +37,7 @@ Fakty zweryfikowane i użyte w decyzjach:
 - Modele Decisions przyjmujące obrazy obejmują `openai/gpt-6-luna-decisions` i `typesafe/jev-1.14` (lista w „Multimodal Decisions”).
 - Chat: `reasoning: {effort: "medium"}` (enum: `max`, `xhigh`, `high`, `medium`, `low`, `minimal`, `none`); obraz jako część `image_url` z `data:` URL; `response_format` typu `json_schema` (`name`, `schema`, `strict`); `usage` z `prompt_tokens`, `completion_tokens`, `cost`, `completion_tokens_details.reasoning_tokens`.
 - Błędy (OpenAPI): 400, 401, 402, 403, 404, 413, 429, 500, 502, 503, 524, 529; ciało `{error: {code, message, metadata}}`.
-- Cennik `gpt-6-luna-decisions`, `jev-1.14`, `gpt-6-luna`: **niepotwierdzony** (strony modeli HTTP 404). `jev-1.13`: 0,042 USD/mln tokenów wejścia, wyjście bez opłat.
+- Cennik według prowadzącego (12.11.2026): `typesafe/jev-1.14` 0,042 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 262K; `openai/gpt-6-luna-decisions` 0,10 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 1,1M. `gpt-6-luna` (poziom 2): **niepotwierdzony**, ustala go nagranie (D-003-6) i `usage.cost`.
 
 ---
 
@@ -64,7 +64,7 @@ Opisy kryteriów (`criteria`) to krótkie, neutralne definicje etykiet (np. dla 
 ### 3.3 Kontrakt żądań
 
 **Poziom 1 i model porównawczy — Decisions API:**
-- `model`: `openai/gpt-6-luna-decisions` (poziom 1) albo `typesafe/jev-1.14` (porównawczy).
+- `model`: poziom 1 domyślnie `typesafe/jev-1.14` (nadpisywalne: konfiguracja > `DECISION_MODEL` > domyślna); porównawczy domyślnie `openai/gpt-6-luna-decisions` (ADR-000 D9).
 - `questions`: jeden wpis `<question_id>` typu `choice`, `instructions` = tekst pytania, `criteria` = `options` z opisami.
 - `state`: **tylko obraz** (część obrazowa albo odwołanie do `assets`, zgodnie z formatem z nagrania). Bez tekstu kontekstowego: bez tagów mapy, etykiet, detekcji Mapillary, identyfikatorów, nazw plików, wartości OSM/Overture.
 - Nie wysyłamy `session_id`, `user`, `trace`, `provider` (pola mogłyby nieść identyfikatory).
@@ -287,7 +287,7 @@ sequenceDiagram
   participant L as CostLog
   C->>K: get(level 1 key)
   K-->>C: miss
-  C->>B: reserve(gpt-6-luna-decisions)
+  C->>B: reserve(jev-1.14)
   B-->>C: OK
   C->>D: POST /api/alpha/decisions (state: tylko obraz, choice)
   D-->>C: 200 choice 40, confidence 0.93, usage.cost
