@@ -20,6 +20,19 @@ Każda decyzja ma oznaczenie zakresu:
 
 Interfejsy (adapter źródła, kontrakt danych, klient modelu) projektujemy od MVP pod docelowe v1, aby przyrosty nie zmieniały kroków F3–F7.
 
+### Stan środowiska i danych (zweryfikowano 2026-11-12)
+
+| Element | Stan | Dowód |
+|---|---|---|
+| Profil danych | ✅ `reports/map-qa/profile.md` (śledzony w Git), odświeżany `profile_data.py` | typy (`DESCRIBE`), CRS, geometrie, duplikaty, relacje `photo_id`, formaty `maxspeed`, braki |
+| Pliki lokalne | ✅ 0 niepoprawnych geometrii, 0 duplikatów kluczy, relacje `photo_id` kompletne (561 = 561) | profil |
+| Databricks `workspace.map_qa` | ✅ dostęp działa: Databricks CLI 1.26.0, token kursowy z zakresem `sql`, warehouse z `DATABRICKS.md`; liczności 5 tabel zgodne z plikami | ręczny odczyt użytkownika (`query_databricks.py`) |
+| Databricks: zapytania przestrzenne, limit `INLINE`, dekodowanie `hex(WKB)` | ⏳ niezweryfikowane | nagrania DB-01/DB-02 (ADR-001 §8) |
+| Narzędzia | ✅ uv 0.13.7, Python 3.12.16 (przez uv), DuckDB 1.5.6 + spatial | profil |
+| OpenRouter | ⏳ klucz ustawiony, żadne zapytanie nie zostało wysłane | nagranie D-003-6 przed implementacją klienta |
+
+Zmienne `DATABRICKS_*` istnieją tylko w sesji PowerShell użytkownika. Agent ma do nich dostęp wyłącznie wtedy, gdy uruchomiono go z tego okna, i sprawdza tylko ich obecność.
+
 ---
 
 ## 2. Odniesienia do dokumentacji technologii
@@ -96,6 +109,7 @@ app/
       data/                 małe syntetyczne CSV/GeoParquet i 3–5 obrazów testowych
 mapqa.toml                  (opcjonalnie, w katalogu roboczym; ignorowany przez Git, jeśli lokalny)
 reports/map-qa/<run_id>/    wyniki uruchomień (ignorowane przez Git)
+reports/map-qa/profile.md   profil danych wejściowych (jedyny śledzony plik w reports/, zasada w AGENTS.md)
 course-materials/exercise-data/map-qa/data/   cache, pobrane zdjęcia, rozszerzenia DuckDB `.duckdb_extensions/` (ignorowane przez Git)
 ```
 
@@ -204,7 +218,7 @@ Polecenia `eval` korzystają z tej samej kaskady, cache, budżetu i potwierdzeni
 | `MAPQA_CONFIG` | Ścieżka pliku konfiguracyjnego | Nie | `C:\work\mapqa.toml` |
 | `DATABRICKS_HOST` | Host workspace (nazwa zmiennej konfigurowalna przez `host_env`) | Tak dla źródła `databricks` | `https://dbc-xxxx.cloud.databricks.com` |
 | `DATABRICKS_TOKEN` | Token SQL (konfigurowalne przez `token_env`) | Tak dla `databricks` dostęp `rest` | `dapi…` (nigdy w repo) |
-| `DATABRICKS_SQL_WAREHOUSE_ID` | ID warehouse (konfigurowalne przez `warehouse_id_env`) | Tak dla `databricks` | `abcdef1234567890` |
+| `DATABRICKS_SQL_WAREHOUSE_ID` | ID warehouse (konfigurowalne przez `warehouse_id_env`) | Tak dla `databricks` | `97c455ee6fb1fcb9` (warehouse ćwiczenia z `DATABRICKS.md`; to nie sekret) |
 
 Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i nie są przechowywane w obiektach konfiguracji, logach, cache, raporcie ani komunikatach błędów (F1.5, F8.8; ADR-001 §6 D-001-5).
 

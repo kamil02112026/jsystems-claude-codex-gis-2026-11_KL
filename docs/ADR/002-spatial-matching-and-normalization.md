@@ -72,9 +72,13 @@ Flagi `grade_separated`, `service_or_restricted` i `distance_mismatch` (przyjęt
 
 „Czyste połączenie” dla priorytetu `wysoki` (F6.3, ADR-004) = zbiór flag pusty albo zawiera wyłącznie `boundary_crossing`.
 
+**Częstości w danych kursu** (`photo_road_links.csv`, profil 2026-11-12): flagi ma 146 z 561 zdjęć. `ambiguous_candidates` 65, `camera_against_way_direction` 35, `panorama_heading_ambiguous` 31, `poor_heading_alignment` 27, `boundary_crossing` 27, `missing_heading` 15, `service_way` 14, `no_osm_within_25m` 3, `overture_spatial_only` 1. Około ¾ zdjęć ma więc czyste połączenie. Bez kierunku jest 15 zdjęć (puste `heading`), a 23 mają `heading = 0`, co jest poprawną wartością (północ).
+
 ### 3.4 Gotowe dopasowanie w MVP
 
 `ProvidedLinkMatcher` [MVP] mapuje `signs/nearest_osm.csv` (zestaw `signs`) i `photo_road_links.csv` (zestaw `photos`, przed P1) na `PhotoRoadLink` z `link_source = provided`; `match_flags`/`candidate_flags` rozdzielone separatorem potwierdzonym testem `SELECT DISTINCT` (ADR-001 §3.7) trafiają do zbioru flag bez zmian. Od [P1] dla połączeń `provided` liczony jest też `distance_m_recomputed` w EPSG:2180 i flaga `distance_mismatch` (§3.3). Od [P1] `OwnMatcher` liczy połączenia sam, a raport pokazuje odsetek zgodnych `osm_way_id` z `photo_road_links.csv` (z mianownikiem = zdjęcia z dopasowaniem w obu).
+
+**Dostarczone połączenia w danych kursu** (profil 2026-11-12): relacja ze zdjęciami 1:1 (561 = 561), wszystkie `osm_way_id` i `overture_id` istnieją w warstwach. `match_method`: `osm_source_reference` 557, `spatial_fallback` 1, `none` 3. Dystans aparat → droga: mediana 2,43 m, p95 9,82 m, max 22,17 m. Tylko 3 zdjęcia nie mają kandydata, więc w P1 `OwnMatcher` służy głównie walidacji (`distance_mismatch`, ranking), a nie uzupełnianiu braków. Drogi połączone ze zdjęciami mają `maxspeed` w 95% (531/558), wobec 16,3% w całym OSM; to obciążenie próbki jest opisane w PRD §7.
 
 ### 3.5 Normalizacja wartości
 

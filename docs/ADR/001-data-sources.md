@@ -20,7 +20,7 @@ Nie obejmuje: łączenia zdjęć z drogami (ADR-002), modeli (ADR-003), raportu 
 | Biblioteka / usługa | Context7 ID albo dokumentacja | Zastosowanie |
 |---|---|---|
 | Databricks SQL Statement Execution API 2.0 | `/websites/databricks_api`; samouczek https://docs.databricks.com/aws/en/dev-tools/sql-execution-tutorial | `POST /api/2.0/sql/statements`, `GET .../{statement_id}`, `GET .../result/chunks/{chunk_index}` |
-| Databricks CLI (wersja sprawdzona w danych kursu: 1.23.0) | `/databricks/cli` | `databricks api post /api/2.0/sql/statements --json ...` |
+| Databricks CLI (w danych kursu 1.23.0; na VM-ce zainstalowana i sprawdzona 1.26.0, 2026-11-12) | `/databricks/cli` | `databricks api post /api/2.0/sql/statements --json ...` |
 | DuckDB 1.5.6 + `spatial` | `/websites/duckdb_current` | `read_parquet` (GeoParquet), `read_csv`, `DESCRIBE`, `ST_GeomFromHEXWKB`, `ST_Intersects`, `ST_MakeEnvelope` (silnik — ADR-000 D2) |
 | httpx 0.28.1 | https://www.python-httpx.org/ | Klient REST |
 | Pydantic 2.14.2 | https://docs.pydantic.dev/latest/ | Modele konfiguracji |
@@ -33,6 +33,11 @@ Fakty zweryfikowane 2026-11-03 i użyte w decyzjach:
 - Kolejne części: `result.next_chunk_index` i `result.next_chunk_internal_link` (ścieżka zaczyna się od `/`).
 - Parametry nazwane `:name` z listą `parameters` (`name`, `value`, `type`; domyślnie `STRING`).
 - Tabele `workspace.map_qa.*` przechowują geometrię jako **BINARY WKB** bez SRID (`sources.json` → `databricks.geometry_encoding`, `DATABRICKS.md`).
+
+Fakty zweryfikowane 2026-11-12 (`reports/map-qa/profile.md`):
+- **Databricks dostępny:** CLI 1.26.0, `databricks current-user me` z tokenem kursowym działa, a `query_databricks.py` zwrócił liczności 5 tabel zgodne z plikami (99 768 / 85 405 / 561 / 561 / 1730). Odczyt wykonał użytkownik we własnym oknie PowerShell. Zapytania przestrzenne `ST_*`, limit `INLINE` dla pełnych dróg i `hex(geometry)` nadal czekają na nagrania DB-01/DB-02.
+- **Rzeczywisty schemat plików (`DESCRIBE`):** `osm_roads` 26 kolumn (`tags` to JSON w VARCHAR; `maxspeed`, `lanes` itd. to VARCHAR; geometria `GEOMETRY('EPSG:4326')`). `overture_segments` 14 kolumn (geometria `GEOMETRY('OGC:CRS84')`; `version` to INTEGER, czyli wersja obiektu, a nie wydanie; dodatkowo `subclass`, `name`, `connectors`, `road_flags`, `access_restrictions`, `bbox`). `photos.csv` 21 kolumn (`captured_at` TIMESTAMPTZ). `photo_road_links.csv` 11 kolumn.
+- **Wartości `candidate_flags`** (separator `;`): `ambiguous_candidates`, `camera_against_way_direction`, `panorama_heading_ambiguous`, `poor_heading_alignment`, `boundary_crossing`, `missing_heading`, `service_way`, `no_osm_within_25m`, `overture_spatial_only`.
 
 ---
 
@@ -96,7 +101,7 @@ To samo zapytanie co §3.4 wysłane przez `subprocess` z listą argumentów (bez
 ### 3.7 Kontrakt schematu z rzeczywistych danych (pierwszy krok implementacji)
 
 Przyjęte za wersją referencyjną prowadzącego (ADR-001 §3.1, ADR-002 §3.4):
-1. **`schema_expected.json`:** pierwszy test integracyjny wykonuje `DESCRIBE` (DuckDB) na `osm_roads.parquet`, `overture_segments.parquet`, `photos.csv`, `photo_road_links.csv`, `signs/signs.csv` i `signs/nearest_osm.csv`. Wynik pierwszego **rzeczywistego** `DESCRIBE` (nazwy kolumn, typy, zagnieżdżone pola struktur Overture) zapisujemy w `app/tests/fixtures/schema_expected.json` z datą i `sha256` pliku źródłowego; listy nie przepisujemy z dokumentacji ani z §4. Każdy kolejny run testów porównuje `DESCRIBE` z plikiem; rozbieżność = `ContractViolation` (kod 1) z nazwą tabeli i kolumny. Kolumny wymagane w §4, których nie ma w `schema_expected.json`, wymagają aktualizacji tego ADR przed implementacją (nie zgadujemy nazw).
+1. **`schema_expected.json`:** pierwszy test integracyjny wykonuje `DESCRIBE` (DuckDB) na `osm_roads.parquet`, `overture_segments.parquet`, `photos.csv`, `photo_road_links.csv`, `signs/signs.csv` i `signs/nearest_osm.csv`. Wynik pierwszego **rzeczywistego** `DESCRIBE` (nazwy kolumn, typy, zagnieżdżone pola struktur Overture) zapisujemy w `app/tests/fixtures/schema_expected.json` z datą i `sha256` pliku źródłowego; listy nie przepisujemy z dokumentacji ani z §4. Pierwszy rzeczywisty `DESCRIBE` wykonano przy profilu z 2026-11-12 (§2); test kontraktu generuje plik ponownie tym samym zapytaniem i porównuje go z profilem. Każdy kolejny run testów porównuje `DESCRIBE` z plikiem; rozbieżność = `ContractViolation` (kod 1) z nazwą tabeli i kolumny. Kolumny wymagane w §4, których nie ma w `schema_expected.json`, wymagają aktualizacji tego ADR przed implementacją (nie zgadujemy nazw).
 2. **`SELECT DISTINCT` na wartościach słownikowych:** test kontraktu zapisuje w `schema_expected.json` (sekcja `distinct_values`) pełną listę:
    - flag z `photo_road_links.candidate_flags` i `signs/nearest_osm.csv` `match_flags` po rozbiciu separatorem (potwierdza separator i pisownię flag używanych w ADR-002 §3.3);
    - wartości `road_surface[].value` z `overture_segments.parquet` (po `unnest`; potwierdza mapowanie nawierzchni ADR-002 §3.5).
@@ -111,11 +116,11 @@ Wszystkie geometrie EPSG:4326 (lon/lat). Każde źródło zwraca te same kolumny
 | Zbiór | Klucz | Wymagane kolumny (typ logiczny) | Uwagi |
 |---|---|---|---|
 | `osm_roads` | `osm_id` (Int64) | `highway` (str), `maxspeed`, `surface`, `lit` (str \| null), `tags` (mapa str→str), `node_ids` (lista Int64), `geometry` (LineString) | `tags` zawiera surowe `maxspeed:*`; liczności: 99 768 |
-| `overture_segments` | `id` (str, GERS) | `class` (str), `speed_limits` (lista struktur: `max_speed` {`value`, `unit`}, `min_speed`, `when`, `between`, `is_max_speed_variable`), `road_surface` (lista {`value`, `between`}), `sources` (lista {`dataset`, `record_id`, `between`, ...}), `level_rules` (lista \| null; flaga `grade_separated`, ADR-002 §3.3), `geometry` (LineString), `version`/wydanie (str) | Dokładne pola zagnieżdżone potwierdza test kontraktu na GeoParquet; liczności: 85 405 |
+| `overture_segments` | `id` (str, GERS) | `class` (str), `speed_limits` (lista struktur: `max_speed` {`value`, `unit`}, `min_speed`, `when`, `between`, `is_max_speed_variable`), `road_surface` (lista {`value`, `between`}), `sources` (lista {`dataset`, `record_id`, `between`, ...}), `level_rules` (lista \| null; flaga `grade_separated`, ADR-002 §3.3), `geometry` (LineString), `version` (Int, wersja obiektu GERS) | Wydanie Overture (`2026-10-21.0`) pochodzi z `sources.json`, nie z kolumny `version`. Pola zagnieżdżone potwierdzone `DESCRIBE` (§2); liczności: 85 405 |
 | `photos` | `photo_id` (str) | `filename`, `source`, `source_url`, `longitude`, `latitude` (float), `heading` (float \| **null**), `captured_at` (datetime UTC), `sequence` (str), `license`, `author`, `sha256`, `is_panorama` (bool), `image_path` (ścieżka \| null), `image_status` (`ok`, `missing_file`, `hash_mismatch`) | `heading = 0.0` ≠ null (F2.4); liczności: 561 |
 | `photo_road_links` | `photo_id` | `osm_way_id` (Int64 \| null), `overture_id` (str \| null), `distance_m`, `way_bearing`, `bearing_diff`, `directed_bearing_diff` (float \| null), `osm_candidate_count` (Int64), `match_method` (str), `candidate_flags` (zbiór str) | Punkt odniesienia dla F3.5; 561 |
-| `traffic_signs` | `id` | `object_value` (str), `first_seen_at`, `last_seen_at`, `image_ids` (lista str), `geometry` (Point) | 1730 |
-| `signs` [MVP, tylko `files`] | `photo_id` | jak `photos` + `crop_sha256`, `crop_path`, `mapillary_value` (str), `area` (str) | 119 |
+| `traffic_signs` | `id` | `object_value` (str), `first_seen_at`, `last_seen_at`, `image_ids` (lista str), `geometry` (Point) | 1730. W `traffic_signs.geojson` czytanym przez `ST_Read` kolumna geometrii nazywa się `geom`; adapter zmienia nazwę na `geometry` |
+| `signs` [MVP, tylko `files`] | `photo_id` | jak `photos` + `crop_sha256`, `crop_path`, `mapillary_value` (str), `area` (str) | 119. **Mapowanie nazw z `signs/signs.csv`:** `compass_angle` → `heading`, `creator` → `author`. Plik nie ma `filename` ani `is_panorama` (adapter: ścieżka z `photo_id`, `is_panorama = false`) |
 | `sign_nearest_osm` [MVP] | `photo_id` | `osm_way_id`, `distance_m`, `heading_diff_deg`, `highway`, `maxspeed`, `maxspeed_forward`, `maxspeed_backward`, `maxspeed_conditional`, `oneway`, `candidate_count`, `match_flags` (zbiór str), `osm_timestamp` | Zastępuje F3 w MVP |
 
 Etykiety referencyjne **nie należą** do `DataBundle` (izolacja etykiet, ADR-004 §3.10). Czyta je wyłącznie `evaluation.labels` z katalogu danych kursu (`labels_path`, domyślnie `course-materials/exercise-data/map-qa`), niezależnie od wybranego źródła:
@@ -149,7 +154,7 @@ Referencyjne liczności (README danych, PRD kryterium 17): `osm_roads` 99 768, `
 ### D-001-1. Pliki jako źródło domyślne i referencyjne
 **Status:** Accepted
 **Data:** 2026-11-03
-**Kontekst:** Zestaw `signs/` istnieje tylko lokalnie; Databricks wymaga tokenu z czatu i sieci. MVP ma działać offline.
+**Kontekst:** Zestaw `signs/` istnieje tylko lokalnie; Databricks wymaga tokenu z czatu i sieci. MVP ma działać offline. Aktualizacja 2026-11-12: dostęp do Databricks działa i liczności są zgodne z plikami. Decyzja pozostaje bez zmian, bo token istnieje tylko w sesji użytkownika, a `signs/` nadal nie ma w chmurze.
 **Decyzja:** Wbudowane źródło `files` jest domyślne; wyniki `files` są wzorcem w testach zgodności `files` ↔ `databricks` (F8.10).
 **Odrzucone alternatywy:**
 - Databricks jako domyślne: blokuje pracę bez tokenu i testy w CI.

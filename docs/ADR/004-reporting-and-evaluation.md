@@ -78,7 +78,7 @@ Liczby z przecinkiem dziesiętnym (format polski), dwa miejsca po przecinku dla 
 
 ### 3.5 Katalog runu
 
-`reports/map-qa/<run_id>/` (ignorowany przez Git — `.gitignore` dostaje wpis `reports/`):
+`reports/map-qa/<run_id>/` (ignorowany przez Git: `.gitignore` ignoruje całe `reports/` poza `reports/map-qa/profile.md`, który jest profilem danych wejściowych, a nie wynikiem runu):
 - `run_id` = `YYYYMMDDTHHMMSSZ-<6 hex>` (UTC + skrót `sha256` parametrów `RunParams` bez `run_id`).
 - `run.json` — `RunParams`, `SourceDescriptor` (z `input_hashes` przed i po runie), wersje narzędzia i bibliotek, podsumowanie (koperta `result` z ADR-000 §6). Przy kodzie 4 (`input_modified`, ADR-000 D12) `run.json` i nagłówek `report.md` zawierają ostrzeżenie „Dane wejściowe zmieniły się w trakcie uruchomienia — wyniki niewiarygodne” z listą ścieżek.
 - `report.md` [MVP], `report.html` [P4], `manual_queue.csv`, `evaluation.json` (gdy są etykiety), `costs.jsonl`, `thumbs/<photo_sha256>.jpg` (miniatury 320 px dłuższego boku, JPEG jakość 80).
@@ -87,7 +87,7 @@ Liczby z przecinkiem dziesiętnym (format polski), dwa miejsca po przecinku dla 
 
 Sekcje `report.md` w tej kolejności (nagłówki po polsku):
 1. **Parametry uruchomienia** — bbox, atrybuty, zestaw, źródło (`SourceDescriptor`, F7.6), `model_reading` i sposób potwierdzenia (`interactive`, `flag_yes`, `cache_only`, `declined`), manifest kosztu pokazany przed odczytem, modele i effort, progi, limity, `run_id`, wersja narzędzia. Bez odczytu modelem sekcje modelu mają tekst „Odczyt modelem nie był uruchomiony” (przyjęte za wersją referencyjną prowadzącego, ADR-004 §3.3).
-2. **Profil danych** — liczności per zbiór (total / w bbox), kompletność `maxspeed`, `surface`, `lit` jako „x% (n/N)”, odrzucone rekordy według przyczyny, ostrzeżenia, zgodność połączeń z referencją [P1].
+2. **Profil danych** — liczności per zbiór (total / w bbox), kompletność `maxspeed`, `surface`, `lit` jako „x% (n/N)”, odrzucone rekordy według przyczyny, ostrzeżenia, zgodność połączeń z referencją [P1]. Kompletność `maxspeed` liczy liczby **i** typy `PL:*` z `maxspeed:type`/`source:maxspeed` (ADR-002 §3.5). Liczności dla całego bboxu danych porównujemy z `reports/map-qa/profile.md`; rozbieżność to ostrzeżenie „profil nieaktualny albo dane zmienione”. Sekcja zawiera też adnotację o obciążeniu próbki zdjęć (PRD §7).
 3. **Lejek kaskady** — per atrybut: pytania ogółem → rozstrzygnięte na poziomie 1 → eskalowane → rozstrzygnięte na poziomie 2 → przekazane człowiekowi; liczby i odsetki z mianownikiem; osobno `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds`, `skipped_no_model`.
 4. **Podsumowanie kandydatów** — tabela atrybut × priorytet; liczba nieporównywalnych z powodami.
 5. **Kolejka ręcznej weryfikacji** — wiersze jak w F7.3: drogi (OSM way z linkiem `https://www.openstreetmap.org/way/<id>`, Overture id), miniatura (`thumbs/…`) z atrybucją (autor, licencja, link źródłowy), data zdjęcia, wartości surowe i znormalizowane, odczyt z pewnością i poziomem (przy eskalacji także odpowiedź poziomu 1), flagi, powód. Dla > 200 pozycji raport pokazuje pierwsze 200 i odsyła do CSV.
