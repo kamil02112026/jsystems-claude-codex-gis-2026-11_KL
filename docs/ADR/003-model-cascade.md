@@ -26,7 +26,7 @@ Nie obejmuje: reguł kandydatów i kolejki (ADR-004), metryk ewaluacji (ADR-004)
 | OpenRouter limity i błędy | https://openrouter.ai/docs/api_reference/limits.md | 402/429, nagłówki `X-RateLimit-*` |
 | httpx 0.28.1 | https://www.python-httpx.org/ | Klient, timeout, brak ponowień |
 | respx 0.23.1 | https://lundberg.github.io/respx/ | Mock w testach integracyjnych |
-| Pillow 13.0.0 | https://pillow.readthedocs.io/en/stable/ | Przygotowanie obrazu |
+| Pillow 12.0.0 | https://pillow.readthedocs.io/en/stable/ | Przygotowanie obrazu (`ImageOps.exif_transpose`, skalowanie); wersja jak w danych kursu (ADR-000 §2) |
 | sqlite3 (stdlib) | https://docs.python.org/3.12/library/sqlite3.html | Cache |
 
 Fakty zweryfikowane i użyte w decyzjach:
@@ -60,7 +60,7 @@ Opisy kryteriów (`criteria`) to krótkie, neutralne definicje etykiet (np. dla 
 
 Przygotowanie musi spełnić wymagania obrazów Jev (`typesafe/jev-1.14`, model domyślny poziomu 1): tylko PNG/JPEG, 256–1568 px na bok, 78 400–2 458 624 px łącznie, ≤ 16 MiB na plik, model **nie** obraca obrazu według EXIF (przyjęte za wersją referencyjną prowadzącego, ADR-003 §2, §3.2, D-34). Jeden przygotowany obraz na plik źródłowy trafia do **wszystkich** modeli i poziomów (poziom 1, poziom 2, model porównawczy), aby porównanie modeli mierzyło to samo wejście, także po zamianie poziomu 1 Jev ↔ Luna decisions.
 
-Kroki (`ImagePreparer`, Pillow 13.0.0):
+Kroki (`ImagePreparer`, Pillow 12.0.0):
 1. Wejście: plik obrazu z `DataBundle` (wycinek `signs/crops/` albo pełny kadr). Format inny niż PNG/JPEG → `image_out_of_bounds` (bez konwersji formatu).
 2. `ImageOps.exif_transpose` — fizyczny obrót według orientacji EXIF (Jev ignoruje znacznik orientacji).
 3. Skalowanie z zachowaniem proporcji, filtr `LANCZOS`: gdy krótszy bok < 256 px — powiększenie do 256 px (małe wycinki znaków); gdy dłuższy bok > 1568 px — zmniejszenie do 1568 px.

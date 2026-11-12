@@ -20,7 +20,7 @@ Nie obejmuje: samej kaskady (ADR-003), normalizacji (ADR-002).
 | Biblioteka / źródło | Context7 ID albo dokumentacja | Zastosowanie |
 |---|---|---|
 | Jinja2 3.1.6 | https://jinja.palletsprojects.com/en/stable/ | Szablony `report.md.j2`, `report.html.j2`; autoescape dla HTML |
-| Pillow 13.0.0 | https://pillow.readthedocs.io/en/stable/ | Miniatury 320 px |
+| Pillow 12.0.0 | https://pillow.readthedocs.io/en/stable/ | Miniatury 320 px (wersja jak w danych kursu, ADR-000 §2) |
 | pandas 3.1.0 | https://pandas.pydata.org/docs/ | Zapis CSV, agregacje metryk |
 | Atrybucja danych | `course-materials/exercise-data/map-qa/ATTRIBUTION.md` | Tekst licencji ODbL / CC BY-SA w raporcie |
 | OpenRouter cookbook „jev-classification” | `/openrouterteam/docs` | Kalibracja progu po pasmach pewności na próbie z etykietami |

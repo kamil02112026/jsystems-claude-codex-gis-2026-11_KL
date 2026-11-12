@@ -44,12 +44,12 @@ Wersje sprawdzone 2026-11-03 (`pip index versions`, PyPI). Identyfikatory Contex
 | Typer | 0.27.3 | https://typer.tiangolo.com/ | CLI |
 | Pydantic | 2.14.2 | https://docs.pydantic.dev/latest/ | Walidacja konfiguracji, modele wyników, JSON |
 | Jinja2 | 3.1.6 | https://jinja.palletsprojects.com/en/stable/ | Szablony raportu MD/HTML |
-| Pillow | 13.0.0 | https://pillow.readthedocs.io/en/stable/ | Przygotowanie obrazu dla modelu, miniatury |
+| Pillow | 12.0.0 (świadomie nie 13.0.0) | https://pillow.readthedocs.io/en/stable/ | Przygotowanie obrazu dla modelu, miniatury. Wersja zgodna z danymi kursu: README `exercise-data/map-qa` podaje, że kadry (JPEG q82) i wycinki (JPEG q92) powstały w Pillow 12.0.0, a inna wersja biblioteki JPEG może zmienić bajty przeskalowanego obrazu i dać niezgodny `sha256` (przyjęte za wersją referencyjną prowadzącego) |
 | pytest | 9.2.0 | https://docs.pytest.org/en/stable/ | Testy |
 | tomllib | stdlib 3.12 | https://docs.python.org/3.12/library/tomllib.html | Odczyt `mapqa.toml` |
 | sqlite3 | stdlib 3.12 | https://docs.python.org/3.12/library/sqlite3.html | Cache odpowiedzi modeli |
 
-**Zasada przypinania:** wersje powyżej wpisujemy jako dokładne (`==`) w `app/pyproject.toml` i zatwierdzamy `uv.lock`. Jeśli `uv lock` nie znajdzie spójnego zestawu (np. pandas 3.1.0 z geopandas 1.2.0), implementujący agent obniża **jedną** bibliotekę do najnowszej zgodnej wersji, zapisuje przyczynę w sekcji „Odchylenia od ADR” w opisie PR i aktualizuje tę tabelę.
+**Zasada przypinania:** wersje powyżej wpisujemy jako dokładne (`==`) w `app/pyproject.toml` i zatwierdzamy `uv.lock`. Pillow jest wyjątkiem od zasady „najnowsza wersja”: pozostaje 12.0.0 także przy aktualizacji zależności, dopóki dane kursu nie zostaną wygenerowane nowszą wersją. Jeśli `uv lock` nie znajdzie spójnego zestawu (np. pandas 3.1.0 z geopandas 1.2.0), implementujący agent obniża **jedną** bibliotekę (nigdy Pillow) do najnowszej zgodnej wersji, zapisuje przyczynę w sekcji „Odchylenia od ADR” w opisie PR i aktualizuje tę tabelę.
 
 **Ceny modeli (prowadzący, 12.11.2026):** `typesafe/jev-1.14` 0,042 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 262K; `openai/gpt-6-luna-decisions` 0,10 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 1,1M. Cena `openai/gpt-6-luna` i opóźnienia wszystkich modeli są niepotwierdzone. Koszt każdego zapytania odczytujemy z `usage.cost` odpowiedzi (ADR-003).
 
