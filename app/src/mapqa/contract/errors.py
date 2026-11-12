@@ -45,3 +45,10 @@ class SourceUnavailable(MapQAError):
 class AuthFailed(MapQAError):
     exit_code = 2
     code = "auth_failed"
+
+
+class InputModified(MapQAError):
+    """Input files changed during the run (ADR-000 D12, exit code 4)."""
+
+    exit_code = 4
+    code = "input_modified"
