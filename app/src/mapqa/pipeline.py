@@ -58,7 +58,21 @@ def build_port(loaded: LoadedConfig) -> ModelPort:
 
 
 def _stdin_is_tty() -> bool:
-    return sys.stdin is not None and sys.stdin.isatty()
+    """True only for an interactive console. On Windows the NUL device reports isatty() == True,
+    so we additionally require a real console handle (GetConsoleMode succeeds)."""
+    if sys.stdin is None or not sys.stdin.isatty():
+        return False
+    if os.name != "nt":
+        return True
+    import ctypes  # noqa: PLC0415
+    import msvcrt  # noqa: PLC0415
+
+    try:
+        handle = msvcrt.get_osfhandle(sys.stdin.fileno())
+    except (OSError, ValueError):
+        return False
+    mode = ctypes.c_uint32()
+    return bool(ctypes.windll.kernel32.GetConsoleMode(handle, ctypes.byref(mode)))
 
 
 def _sha256(path: Path) -> str | None:
@@ -148,9 +162,15 @@ def _confirm(manifest: dict[str, Any], args: argparse.Namespace) -> Confirmation
             hint="Dodaj --yes albo uruchom bez --model.",
         )
     stream = sys.stderr if getattr(args, "output", "text") == "json" else sys.stdout
-    stream.write("Płatny odczyt modelem:\n" + json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    stream.write("Płatny odczyt modelem:\n" + json.dumps(manifest, ensure_ascii=False, indent=2) + "\nKontynuować? [y/N] ")
     stream.flush()
-    answer = input("Kontynuować? [y/N] ").strip().lower()
+    try:
+        answer = input().strip().lower()  # no prompt argument: input() would write it to stdout
+    except EOFError:  # stdin closed: no confirmation was given (D11)
+        raise ConfirmationRequired(
+            "Odczyt modelem wymaga potwierdzenia, a wejście zostało zamknięte.",
+            hint="Dodaj --yes albo uruchom bez --model.",
+        ) from None
     return "interactive" if answer in ("y", "t", "tak", "yes") else "declined"
 
 

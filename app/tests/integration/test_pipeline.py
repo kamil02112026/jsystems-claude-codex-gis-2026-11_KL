@@ -134,6 +134,40 @@ def test_circuit_breaker_gives_code_3_and_report(cfg: Path, capsys, monkeypatch)
     assert "Odczyt przerwany" in report or "503" in report
 
 
+def test_prompt_never_pollutes_json_stdout(cfg: Path, capsys, monkeypatch) -> None:
+    import io
+
+    port = FakePort()
+    monkeypatch.setattr(pipeline, "build_port", lambda *a, **k: port)
+    monkeypatch.setattr(pipeline, "_stdin_is_tty", lambda: True)
+    monkeypatch.setattr("sys.stdin", io.StringIO("n\n"))
+    rc, doc = _run(cfg, capsys, "--model")  # json.loads fails if the prompt went to stdout
+    assert rc == 0 and doc["result"]["confirmation"] == "declined" and port.calls == 0
+
+
+def test_windows_nul_device_is_not_a_terminal() -> None:
+    import os
+    import subprocess
+    import sys
+
+    code = "import mapqa.pipeline as p, sys; sys.exit(0 if p._stdin_is_tty() else 7)"
+    proc = subprocess.run([sys.executable, "-c", code], stdin=subprocess.DEVNULL, env={**os.environ})
+    assert proc.returncode == 7
+
+
+def test_closed_stdin_on_prompt_is_confirmation_required(cfg: Path, capsys, monkeypatch) -> None:
+    port = FakePort()
+    monkeypatch.setattr(pipeline, "build_port", lambda *a, **k: port)
+    monkeypatch.setattr(pipeline, "_stdin_is_tty", lambda: True)
+
+    def eof(*_):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", eof)
+    rc, doc = _run(cfg, capsys, "--model")
+    assert rc == 1 and doc["error"]["code"] == "confirmation_required" and port.calls == 0
+
+
 def test_declined_confirmation_gives_report_without_model(cfg: Path, capsys, monkeypatch) -> None:
     port = FakePort()
     monkeypatch.setattr(pipeline, "build_port", lambda *a, **k: port)
