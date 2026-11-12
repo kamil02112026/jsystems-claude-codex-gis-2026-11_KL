@@ -53,7 +53,7 @@ class RunLimits(_Model):
     max_images: int = Field(default=25, ge=0)
     max_usd: Decimal = Field(default=Decimal("1.00"), ge=0)
     reserve_usd: dict[str, Decimal] = Field(
-        default_factory=lambda: {"level1": Decimal("0.02"), "level2": Decimal("0.04"), "comparison": Decimal("0.02")}
+        default_factory=lambda: {"level1": Decimal("0.02"), "level2": Decimal("0.04"), "compare": Decimal("0.02")}
     )
 
 

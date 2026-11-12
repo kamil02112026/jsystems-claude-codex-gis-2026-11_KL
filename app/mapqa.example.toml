@@ -40,7 +40,7 @@ max_usd = "1.00"
 [limits.reserve_usd]
 level1 = "0.02"
 level2 = "0.04"
-comparison = "0.02"
+compare = "0.02"
 
 # Progi per poziom × model × atrybut (PRD F5.6). Brak wpisu = 0.8 z ostrzeżeniem „próg niekalibrowany”.
 [thresholds.level1."typesafe/jev-1.14"]
