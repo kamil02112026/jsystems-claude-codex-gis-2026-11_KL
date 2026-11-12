@@ -1,0 +1,208 @@
+# Raport Map QA Copilot — {{ vm.run_id }}
+{% if vm.input_modified %}
+
+> **Ostrzeżenie:** Dane wejściowe zmieniły się w trakcie uruchomienia — wyniki niewiarygodne.
+{% for p in vm.input_modified_paths %}
+> - `{{ p }}`
+{% endfor %}
+{% endif %}
+
+## 1. Parametry uruchomienia
+
+- Identyfikator runu: `{{ vm.run_id }}`
+- Wersja narzędzia: {{ vm.tool_version or "brak danych" }}
+- Obszar (bbox): {{ vm.bbox_text }}
+- Atrybuty: {{ vm.attributes|join(", ") or "brak" }}
+- Zestaw danych: {{ vm.dataset or "brak" }}
+{% if vm.source %}
+- Źródło danych: {{ vm.source.name }} (typ: {{ vm.source.type }}, dostęp: {{ vm.source.access }})
+{% for t in vm.source.tables_or_paths %}
+  - `{{ t }}`
+{% endfor %}
+{% endif %}
+- Odczyt modelem: {{ "tak" if vm.model_reading else "nie" }}{% if vm.confirmation %} (potwierdzenie: `{{ vm.confirmation }}`){% endif %}
+
+{% if not vm.model_reading %}
+Odczyt modelem nie był uruchomiony.
+{% else %}
+{% if vm.cost_manifest %}
+Manifest kosztu pokazany przed odczytem:
+{% for k, v in vm.cost_manifest|dictsort %}
+- {{ k }}: {{ v }}
+{% endfor %}
+
+{% endif %}
+{% if vm.models %}
+| Poziom | Model | Effort |
+|---|---|---|
+{% for m in vm.models %}
+| {{ m.level }} | {{ m.model|cell }} | {{ (m.effort or "—")|cell }} |
+{% endfor %}
+
+{% endif %}
+{% if vm.thresholds %}
+Progi pewności:
+{% for k, v in vm.thresholds|dictsort %}
+- {{ k }}: {{ v|pl }}
+{% endfor %}
+
+{% endif %}
+{% for w in vm.uncalibrated_warnings %}
+- Ostrzeżenie: {{ w }}
+{% endfor %}
+{% endif %}
+
+Limity: zapytania {{ vm.limits.max_queries }}, zdjęcia {{ vm.limits.max_images }}, budżet {{ vm.limits.max_usd|usd }} USD.
+
+## 2. Profil danych
+
+| Zbiór | Razem | W bbox |
+|---|---|---|
+{% for d in vm.dataset_counts %}
+| {{ d.dataset|cell }} | {{ d.total }} | {{ d.in_bbox }} |
+{% endfor %}
+
+Kompletność atrybutów:
+{% for c in vm.completeness %}
+- {{ c.attribute }}: {{ pct(c.numerator, c.denominator) }}{% if c.implicit_count %} (w tym {{ c.implicit_count }} wartości domyślnych `PL:*`){% endif %}
+
+{% endfor %}
+
+Odrzucone rekordy według przyczyny:
+{% for reason, n in rejected_by_reason %}
+- `{{ reason }}`: {{ n }}
+{% else %}
+- brak
+{% endfor %}
+{% for w in vm.profile_warnings %}
+
+> Ostrzeżenie: {{ w }}
+{% endfor %}
+
+> {{ vm.sample_bias_note }}
+
+## 3. Lejek kaskady
+{% if not vm.model_reading %}
+
+Odczyt modelem nie był uruchomiony.
+{% endif %}
+
+| Atrybut | Pytania | Poziom 1 | Eskalowane | Poziom 2 | Człowiek | abstain | model_unavailable | budget_exceeded | image_out_of_bounds | skipped_no_model |
+|---|---|---|---|---|---|---|---|---|---|---|
+{% for f in vm.funnel %}
+| {{ f.attribute|cell }} | {{ f.total }} | {{ pct(f.resolved_l1, f.total) }} | {{ pct(f.escalated, f.total) }} | {{ pct(f.resolved_l2, f.escalated) }} | {{ pct(f.handed_to_human, f.total) }} | {{ f.abstain }} | {{ f.model_unavailable }} | {{ f.budget_exceeded }} | {{ f.image_out_of_bounds }} | {{ f.skipped_no_model }} |
+{% endfor %}
+
+## 4. Podsumowanie kandydatów
+{% if candidates_total == 0 %}
+
+Brak kandydatów.
+{% else %}
+
+| Atrybut | wysoki | średni | niski |
+|---|---|---|---|
+{% for attr, by in vm.candidates_by_priority|dictsort %}
+| {{ attr|cell }} | {{ by.get("wysoki", 0) }} | {{ by.get("średni", 0) }} | {{ by.get("niski", 0) }} |
+{% endfor %}
+{% endif %}
+
+Nieporównywalne: {{ vm.not_comparable_reasons.values()|sum }}
+{% for reason, n in vm.not_comparable_reasons|dictsort %}
+- {{ reason }}: {{ n }}
+{% endfor %}
+
+## 5. Kolejka ręcznej weryfikacji
+{% if not queue %}
+
+Brak kandydatów — kolejka ręcznej weryfikacji jest pusta.
+{% else %}
+
+Liczba pozycji: {{ queue|length }}.{% if queue|length > queue_limit %} Poniżej pierwsze {{ queue_limit }}; pełna lista w `manual_queue.csv`.{% endif %}
+
+
+| Priorytet / typ | Droga | Miniatura i atrybucja | Wartości | Odczyt | Powód |
+|---|---|---|---|---|---|
+{% for it in queue[:queue_limit] %}
+{% set thumb = vm.thumbs.get(it.photo_id) %}
+{% set src = it.photo_source_url|safe_url %}
+| {{ it.priorytet|cell }}<br>{{ it.typ|cell }}<br>{{ it.atrybut|cell }} | {% if it.osm_way_id.isdigit() %}[OSM way {{ it.osm_way_id }}](https://www.openstreetmap.org/way/{{ it.osm_way_id }}){% else %}brak drogi{% endif %}{% if it.overture_id %}<br>Overture: {{ it.overture_id|cell }}{% endif %} | {% if thumb %}![miniatura]({{ thumb }}){% else %}Miniatura niedostępna{% endif %}<br>{{ it.photo_author|cell }}, {{ it.photo_license|cell }}{% if src %}, [źródło]({{ src }}){% endif %}<br>{{ it.photo_captured_at|cell }} | OSM: {{ it.osm_raw|cell }} → {{ it.osm_normalized|cell }}<br>Overture: {{ it.overture_raw|cell }} → {{ it.overture_normalized|cell }} | {% if it.l1_model %}Poziom 1 ({{ it.l1_model|cell }}): {{ it.l1_answer|cell }}, p={{ it.l1_probability|pl }}, {{ it.l1_status|cell }}{% else %}Brak odczytu{% endif %}{% if it.l2_model %}<br>Poziom 2 ({{ it.l2_model|cell }}): {{ it.l2_answer|cell }}, p={{ it.l2_probability|pl }}, {{ it.l2_status|cell }}{% endif %}<br>Rozstrzygnął: {{ it.resolved_by|cell or "—" }}, status: {{ it.final_status|cell }}{% if it.link_flags %}<br>Flagi: {{ it.link_flags|cell }}{% endif %} | {{ it.powod|cell }} |
+{% endfor %}
+{% endif %}
+
+## 6. Rozbieżności znak ↔ OSM
+{% if vm.osm_discrepancies %}
+
+- Pary z etykietą `certain` i wartością liczbową: {{ vm.osm_discrepancies.numeric_certain }}
+- Zgodne z OSM: {{ vm.osm_discrepancies.equal }}
+- Różne od OSM: {{ vm.osm_discrepancies.differ }}
+- OSM bez `maxspeed`: {{ vm.osm_discrepancies.no_maxspeed }}
+{% for label, n in vm.discrepancy_distribution|dictsort %}
+- {{ label }}: {{ n }}
+{% endfor %}
+{% else %}
+
+Brak danych (etykiety niedostępne).
+{% endif %}
+
+## 7. Ewaluacja
+{% if vm.evaluation %}
+
+Metryki z jawnymi mianownikami (etykiety `certain`; wykluczone `uncertain`: {{ vm.evaluation.counts.uncertain_excluded }}).
+
+| Metryka | Licznik | Mianownik | Wartość |
+|---|---|---|---|
+{% for name, m in metric_rows(vm.evaluation.overall) %}
+| {{ name }} | {{ m.numerator }} | {{ m.denominator }} | {{ m.value|pl }} |
+{% endfor %}
+{% if vm.evaluation.baseline_mapillary %}
+| baseline_mapillary | {{ vm.evaluation.baseline_mapillary.numerator }} | {{ vm.evaluation.baseline_mapillary.denominator }} | {{ vm.evaluation.baseline_mapillary.value|pl }} |
+{% endif %}
+
+> {{ vm.sample_bias_note }}
+{% if "surface" in vm.attributes %}
+
+> Nawierzchnia: w danych brak klasy `unpaved`, metryki dla tej klasy nie są wiarygodne.
+{% endif %}
+{% elif not vm.model_reading %}
+
+Odczyt modelem nie był uruchomiony.
+{% else %}
+
+Brak ewaluacji (brak etykiet referencyjnych).
+{% endif %}
+
+## 8. Koszt
+
+- Koszt całkowity: {{ vm.cost.total_usd|usd }} USD{% if vm.cost.estimated %} (część kosztów szacowana){% endif %}
+
+{% for lvl, v in vm.cost.per_level_usd|dictsort %}
+- Poziom {{ lvl }}: {{ v|usd }} USD
+{% endfor %}
+{% if vm.cost.per_query_usd is not none %}
+- Na zapytanie: {{ vm.cost.per_query_usd|usd }} USD
+{% endif %}
+{% if vm.cost.per_candidate_usd is not none %}
+- Na kandydata: {{ vm.cost.per_candidate_usd|usd }} USD
+{% endif %}
+- Trafienia cache: {{ vm.cost.cache_hits }}
+- Zapytania: {{ vm.cost.queries_used }}/{{ vm.limits.max_queries }}
+- Zdjęcia: {{ vm.cost.images_used }}/{{ vm.limits.max_images }}
+- Budżet: {{ vm.cost.total_usd|usd }}/{{ vm.limits.max_usd|usd }} USD
+- Pytania z przekroczonym budżetem (`budget_exceeded`): {{ vm.cost.budget_exceeded_count }}
+{% if vm.cost.circuit %}
+
+### Odczyt przerwany: błąd API
+
+Kod błędu: {{ vm.cost.circuit.error_code }}; pytania pominięte (`circuit_open`): {{ vm.cost.circuit.skipped_questions }}.
+{% endif %}
+
+## 9. Licencje i atrybucja
+
+- Dane OpenStreetMap i Overture Maps: ODbL 1.0.
+- Zdjęcia: CC BY-SA 4.0, z autorem i linkiem przy każdej miniaturze.
+{% for a in vm.attributions %}
+- {{ a.photo_id|cell }}: {{ a.author|cell }}, {{ a.license|cell }}{% if a.source_url|safe_url %}, [źródło]({{ a.source_url|safe_url }}){% endif %}
+
+{% endfor %}
+
+Kandydat nie oznacza błędu mapy; decyzję podejmuje człowiek.
