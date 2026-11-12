@@ -26,3 +26,6 @@ __pycache__/
 !/reports/map-qa/
 /reports/map-qa/*
 !/reports/map-qa/profile.md
+
+# Python virtual environments
+.venv/
