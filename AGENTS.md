@@ -95,6 +95,7 @@ Verify only the scope relevant to your change. If the change affects runtime beh
 **Env Vars:** No model API key is required for the synthetic GIS starter, PRD or normal Claude Code/Codex CLI use on the provided accounts. `.env.example` contains optional settings for an explicitly selected API exercise; `OPENROUTER_API_KEY` is needed only when that exercise actually calls OpenRouter.
 
 ### Commit Rules
+- Never commit directly to `main`; work on a feature branch and open a PR. If the current branch is `main`, create a feature branch before the first commit.
 - Commit only after verification passes and the changed scope is in a working state.
 - Keep commits focused: one logical change per commit.
 - Format: `Area: short summary` (e.g. `Backend:`, `Frontend:`, `Docs:`)
