@@ -1,60 +1,14 @@
-# App
+# mapqa — Map Attribute QA Copilot (PoC)
 
-This folder will contain the application built during the course.
+CLI w Pythonie 3.12 (uv), które wskazuje kandydatów do ręcznej weryfikacji atrybutów dróg na podstawie OSM i zdjęć ulic. Specyfikacja: [PRD](../docs/PRD.md), [ADR](../docs/ADR/), plan: [docs/plans/map-qa-mvp-implementation-plan.md](../docs/plans/map-qa-mvp-implementation-plan.md).
 
-## How to start
+Polecenia uruchamiaj z **katalogu głównego repozytorium** (ścieżki w konfiguracji są względne do katalogu roboczego):
 
-The app is scaffolded live during the course through a structured process:
+```powershell
+uv sync --project app
+uv run --project app mapqa --help
+uv run --project app pytest app/tests -q          # unit/contract/integration (bez e2e i paid)
+uv run --project app pytest app/tests -m e2e -q   # prawdziwe CLI na plikach kursu, offline
+```
 
-1. **Research** — use agents to research and validate the project idea
-2. **PRD** — generate a Product Requirements Document (`../docs/PRD.md`)
-3. **ADR** — generate Architecture Decision Records (`../docs/ADR/`) to choose the tech stack
-4. **Scaffold** — use the chosen boilerplate (`create-next-app`, AI SDK starter, Mastra, etc.)
-5. **Implement** — build features with agents using TDD
-
-## Checklist
-
-Use this checklist during scaffolding. Some items are provided by the boilerplate (e.g. `create-next-app` ships `tsconfig.json`, ESLint config). Others you add explicitly.
-
-### Project setup
-- [ ] Choose framework (Next.js, Express+Vite, Mastra, other) — record in ADR
-- [ ] Initialize project (e.g. `npx create-next-app@latest` or equivalent)
-- [ ] TypeScript config (`tsconfig.json`)
-- [ ] Package manager chosen (npm / pnpm / bun)
-
-### Code quality
-- [ ] ESLint config (`eslint.config.js`)
-- [ ] Prettier config (`.prettierrc`, `.prettierignore`)
-- [ ] `.editorconfig` (optional but recommended)
-
-### Testing
-- [ ] Unit/integration test runner (Vitest / Jest)
-- [ ] E2E test runner (Playwright)
-- [ ] Test setup file (e.g. `test-setup.ts` with Testing Library matchers)
-
-### Environment
-- [ ] `.env.example` with required env vars (API keys, ports)
-- [ ] `.env` created locally (gitignored)
-- [ ] `.gitignore` (node_modules, .env, build output, etc.)
-
-### AI integration
-- [ ] Vercel AI SDK (`ai` package) or equivalent
-- [ ] API route / endpoint for chat
-- [ ] Model configuration (provider, model name, API key from env)
-
-### Design
-- [ ] Design tokens (`../assets/design-tokens.json`)
-- [ ] Tailwind CSS or equivalent
-- [ ] Logo and favicon (`../assets/`)
-- [ ] Design system doc (`../docs/design-guidelines.md`)
-
-### Documentation
-- [ ] PRD (`../docs/PRD.md`)
-- [ ] ADRs (`../docs/ADR/`)
-- [ ] AGENTS.md in `app/` with stack-specific rules
-
-## Notes
-
-- Don't create config files manually if the boilerplate provides them — it leads to conflicts.
-- Let the agent research and recommend the right boilerplate based on the ADR decisions.
-- Keep this folder organized: separate routes, components, domain logic, and tests.
+Testy oznaczone `paid` wysyłają prawdziwe zapytania do OpenRouter i uruchamia się je wyłącznie świadomie, za zgodą właściciela.
