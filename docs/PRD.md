@@ -101,7 +101,7 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
 ### F4. Porównanie OSM ↔ Overture
 
 - F4.1 Dla każdej drogi powiązanej ze zdjęciem i każdego wybranego atrybutu system zestawia wartość OSM i Overture.
-- F4.2 Wartości są normalizowane do porównania (np. `50`, `50 mph` → km/h; `asphalt`, `concrete`, `paving_stones` → `paved`), ale **surowe** wartości (`maxspeed:*`, `when`, `between`) są zachowane i pokazane w raporcie.
+- F4.2 Wartości są normalizowane do porównania (np. `50`, `50 mph` → km/h z dokładnością 0,01; `asphalt`, `concrete`, `paving_stones` → `paved`; wartości nieznane → `unknown_value`), ale **surowe** wartości (`maxspeed:*`, `when`, `between`) są zachowane i pokazane w raporcie. Prędkości są równe, gdy różnią się o mniej niż 0,5 km/h. Domyślne wartości `PL:*` (np. `PL:urban` → 50 km/h) są porównywane, ale zawsze oznaczone jako `implicit` w raporcie i powodzie kandydata (decyzja użytkownika 2026-11-12, ADR-002 D-002-4).
 - F4.3 Wynik porównania: `agree`, `disagree`, `osm_missing`, `overture_missing`, `both_missing`, `not_comparable` (np. reguła warunkowa lub wartość tylko dla części segmentu).
 - F4.4 Rozbieżność źródeł **nie jest** oznaczana jako błąd mapy. Raport pokazuje daty/wersje źródeł Overture, w tym czy wartość pochodzi z OSM.
 

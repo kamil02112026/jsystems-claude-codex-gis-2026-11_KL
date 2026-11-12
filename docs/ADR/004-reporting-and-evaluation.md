@@ -42,7 +42,7 @@ Wejście: `PhotoRoadLink` (z `osm_way_id` nie null), `AttributeValue` OSM (i Ove
 
 Bez kandydata: OSM `not_comparable` (powód widoczny w sekcji „Nieporównywalne”), odpowiedzi `brak znaku`/`nieczytelny`/`nie widać` (D10-I1), zdjęcie bez drogi (F3.4), zgodność odczytu z OSM (F6.4 — zgodność nie potwierdza poprawności, ale nie trafia do kolejki).
 
-Porównanie wartości: prędkość — liczba km/h; nawierzchnia — `utwardzona` ↔ `paved`, `nieutwardzona` ↔ `unpaved`; oświetlenie — `tak` ↔ `yes`, `nie` ↔ `no`.
+Porównanie wartości: prędkość — liczba km/h, równe przy |Δ| < 0,5 km/h (ADR-002 §3.5); wartość OSM `speed_source = implicit` (`PL:*`) jest porównywana, ale kandydat ma oznaczenie `implicit` w powodzie i w CSV (`osm_normalized` z dopiskiem `(implicit)`); nawierzchnia — `utwardzona` ↔ `paved`, `nieutwardzona` ↔ `unpaved` (`unknown_value` → OSM `not_comparable`); oświetlenie — `tak` ↔ `yes` albo `yes_conditional`, `nie` ↔ `no`.
 
 ### 3.2 Priorytety (F6.3)
 
@@ -62,7 +62,7 @@ Szablony po polsku, identyfikatory i nazwy tagów w oryginale (w Markdown w back
 - `sources_disagree_photo_supports`: „OSM `maxspeed={raw}`, Overture {wartość}; zdjęcie wskazuje {odczyt} (zgodne z {OSM|Overture}).”
 - `sources_only`: „OSM `maxspeed={raw}`, Overture {wartość}; zdjęcie nie rozstrzyga ({powód}).”
 - `nierozstrzygnięty_odczyt`: „Brak pewnego odczytu: poziom 1 {odpowiedź} p={…} ({powód}), poziom 2 {odpowiedź} p={…} ({powód}).”
-Analogiczne szablony dla `surface`/`lit`. Każdy powód kończy się listą flag połączenia, jeśli są: „Flagi: `ambiguous_candidates`, `service_way`.”
+Przy wartości `implicit` `{raw}` ma postać „`maxspeed=PL:urban` (implicit, 50 km/h)”, a powód kończy się zdaniem „Porównanie z wartością domyślną, nie ze znakiem.”. Analogiczne szablony dla `surface`/`lit` (dla `yes_conditional`: „OSM `lit=automatic` (`lit` warunkowe)”). Każdy powód kończy się listą flag połączenia, jeśli są: „Flagi: `ambiguous_candidates`, `service_way`.”
 
 Liczby z przecinkiem dziesiętnym (format polski), dwa miejsca po przecinku dla pewności.
 
@@ -275,7 +275,8 @@ sequenceDiagram
 | CND-02 poziom 2 / flagi | Unit | jak CND-01, `resolved_by=2` albo `ambiguous_candidates` | `średni` | `conditional_rule_present` → `średni` |
 | CND-03 brak OSM | Unit | OSM missing, pewny odczyt `30` | `osm_missing_photo_confident` | OSM `not_comparable` → brak kandydata |
 | CND-04 odpowiedzi bez wartości | Unit | pewne `brak znaku` przy OSM 50 | brak kandydata (D10-I1) | `nie widać` dla lit |
-| CND-05 zgodność | Unit | odczyt = OSM | brak kandydata | — |
+| CND-05 zgodność | Unit | odczyt = OSM | brak kandydata | odczyt 50, OSM `30 mph` (48,28) → różne (\|Δ\| ≥ 0,5) |
+| CND-07 implicit | Unit | odczyt `40`, OSM `maxspeed=PL:urban` | `photo_vs_osm`, powód z „implicit” i „Porównanie z wartością domyślną” | odczyt `50`, OSM `PL:urban` → brak kandydata, zgodność `implicit` w podsumowaniu |
 | CND-06 brak drogi | Unit | `osm_way_id = null`, pewny odczyt | brak kandydata i brak pozycji kolejki (F3.4) | — |
 | QUE-01 nierozstrzygnięte | Unit | `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds` z drogą | pozycja `nierozstrzygnięty_odczyt` (kryterium 7) | `skipped_no_model` → brak pozycji |
 | QUE-02 stabilne id | Unit | dwa runy, inna kolejność wejścia | identyczne `item_id` i kolejność (kryterium 14) | zmiana `run_id` |

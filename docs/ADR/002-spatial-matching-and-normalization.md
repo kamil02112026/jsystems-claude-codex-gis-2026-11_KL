@@ -74,23 +74,28 @@ Zbiór flag jest zapisywany przy każdym połączeniu; żadna flaga nie usuwa zd
 
 ### 3.5 Normalizacja wartości
 
-Każda funkcja normalizująca zwraca `AttributeValue` (`raw` bez zmian, `normalized`, `status`, `note`). Surowe wartości są zawsze pokazywane w raporcie (F4.2).
+Każda funkcja normalizująca zwraca `AttributeValue` (`raw` bez zmian, `normalized`, `status`, `note`, dla prędkości także `speed_source`). Surowe wartości są zawsze pokazywane w raporcie (F4.2).
 
 **OSM `maxspeed` [MVP]** (kolejność reguł):
 
 | Wejście (`raw`) | `normalized` | `status` |
 |---|---|---|
-| liczba całkowita, np. `50` | 50 | `ok` |
-| `<n> mph` | round(n × 1,609344) | `ok`, `note = "przeliczono z mph"` |
-| `<n> km/h` | n | `ok` |
-| `PL:urban` | 50 | `ok`, `note = "wartość domyślna PL:urban"` |
-| `PL:rural` | 90 | `ok`, `note = "wartość domyślna PL:rural"` |
-| `PL:zone<n>` / `PL:zone:<n>` | n | `ok` |
-| `PL:motorway` | 140 | `ok` |
-| `PL:expressway` | 120 | `ok` |
-| `PL:living_street` | 20 | `ok` |
+| liczba, np. `50` | 50 | `ok`, `speed_source = explicit` |
+| `<n> mph` (także `<n>mph`, wielkość liter dowolna) | round(n × 1,609344; 2), np. `30 mph` → 48,28 | `ok`, `speed_source = explicit`, `note = "przeliczono z mph"` |
+| `<n> km/h` | n | `ok`, `speed_source = explicit` |
+| `PL:urban` | 50 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:urban (obszar zabudowany)"` |
+| `PL:rural` | 90 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:rural (poza obszarem zabudowanym)"` |
+| `PL:zone<n>` / `PL:zone:<n>` (np. `PL:zone30`) | n | `ok`, `speed_source = implicit`, `note = "strefa PL:zone<n>"` |
+| `PL:motorway` | 140 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:motorway"` |
+| `PL:expressway` | 120 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:expressway (dwujezdniowa)"` |
+| `PL:living_street` | 20 | `ok`, `speed_source = implicit`, `note = "wartość domyślna PL:living_street (strefa zamieszkania)"` |
+| inny kod `PL:*` spoza tej tabeli (np. `PL:trunk`) | null | `not_comparable`, `speed_source = implicit`, `note = "nieznany kod PL:*"` |
 | wiele wartości (`50;70`), `none`, `signals`, `variable`, `walk`, inne | null | `not_comparable`, `note` z powodem |
-| brak tagu | null | `missing` |
+| brak tagu | null | `missing` (nigdy 0 ani `none`) |
+
+**Wartości domyślne `PL:*` (decyzja użytkownika 2026-11-12, D-002-4):** wartość liczbowa jest zachowana i porównywana (np. `PL:urban` → 50 km/h), ale wynik zawsze ma `speed_source = implicit`. Pełna tabela powyżej to jedyne wspierane kody; dotyczą samochodu osobowego bez warunków dodatkowych (pora doby, przyczepa). Raport pokazuje surowy tag, wartość i etykietę „implicit” w kolumnie OSM; powód kandydata i wynik porównania z wartością `implicit` po którejkolwiek stronie są oznaczone jako „porównanie z wartością domyślną” (ADR-004 §3.3). Wersja referencyjna prowadzącego nie podstawia wartości (`kind = implicit`, `value_kmh = NULL`); przyjmujemy tylko jego oznaczenie `implicit`.
+
+**Równość prędkości (przyjęte za wersją referencyjną prowadzącego, ADR-001 §3.3):** dwie wartości km/h są równe, gdy |Δ| < 0,5 km/h; |Δ| ≥ 0,5 km/h → różne. Reguła obowiązuje w porównaniu OSM ↔ Overture (§3.6) i odczyt ↔ mapa (ADR-004 §3.1). Wartości z mph przeliczamy przed porównaniem i zaokrąglamy do 0,01 km/h.
 
 **Tagi kierunkowe:** gdy `maxspeed:forward` i `maxspeed:backward` istnieją i się różnią, wartość porównawcza zależy od kierunku jazdy, którego nie znamy z kamery (heading ≠ kierunek jazdy, `sources.json` → `direction`). Reguła: jeśli `bearing_diff ≤ 30°`, wybieramy `forward` przy `directed_bearing_diff ≤ 90°`, inaczej `backward`, z `note = "kierunek wywnioskowany z heading"`; w przeciwnym razie `status = not_comparable`. Gdy jest tylko jeden z tagów kierunkowych i `maxspeed`, wartość bazowa = `maxspeed`.
 
@@ -101,11 +106,20 @@ Każda funkcja normalizująca zwraca `AttributeValue` (`raw` bez zmian, `normali
 2. Reguły bez `when` i z `between` = null albo `[0, 1]` → kandydat wartości bazowej.
 3. Reguły z `between = [a, b]` stosujemy, gdy pozycja liniowa rzutu aparatu na segment (0–1, `line_locate_point(normalized=True)`) ∈ [a, b].
 4. Reguły z `when` zawierającym wyłącznie `heading` stosujemy jak tagi kierunkowe OSM; z innymi warunkami (`vehicle`, `during`, `mode`, `using`) → pomijane w porównaniu, zachowane w `raw`.
-5. Jedna wartość → `ok`; zero → `missing`; więcej niż jedna różna → `not_comparable`. Jednostki `mph` przeliczane jak w OSM.
+5. Jedna wartość → `ok`; zero → `missing`; więcej niż jedna różna (|Δ| ≥ 0,5 km/h) → `not_comparable`. Jednostki `mph` przeliczane jak w OSM (×1,609344, zaokrąglenie do 0,01). Overture podaje wartości jawne: `speed_source = explicit`.
 
-**Nawierzchnia [P5]:** OSM `surface` i Overture `road_surface[].value` → `paved` dla {`asphalt`, `concrete`, `concrete:plates`, `concrete:lanes`, `paving_stones`, `sett`, `cobblestone`, `unhewn_cobblestone`, `metal`, `wood`, `paved`}; `unpaved` dla {`unpaved`, `compacted`, `fine_gravel`, `gravel`, `pebblestone`, `dirt`, `earth`, `ground`, `grass`, `mud`, `sand`, `woodchips`, `grass_paver`}; inne → `not_comparable`. Mapa w jednym module, testowana tabelarycznie.
+**Nawierzchnia [P5]** (klasy `paved`, `unpaved`, `unknown_value`, `missing`; przyjęte za wersją referencyjną prowadzącego, ADR-001 §3.4). Mapowanie jest stałą w jednym module, testowaną tabelarycznie; porównanie bez rozróżniania wielkości liter i spacji na brzegach:
 
-**Oświetlenie [P2]:** OSM `lit` → `yes` dla {`yes`, `24/7`, `automatic`, `sunset-sunrise`, `limited`, `interval`}, `no` dla {`no`, `disused`}; inne → `not_comparable`.
+| Klasa | OSM `surface` | Overture `road_surface[].value` |
+|---|---|---|
+| `paved` | `asphalt`, `concrete`, `concrete:plates`, `concrete:lanes`, `paved`, `paving_stones`, `sett`, `unhewn_cobblestone`, `cobblestone`, `bricks`, `metal`, `wood`, `chipseal` | `paved`, `paving_stones`, `metal` |
+| `unpaved` | `unpaved`, `compacted`, `fine_gravel`, `gravel`, `pebblestone`, `ground`, `dirt`, `earth`, `grass`, `grass_paver`, `mud`, `sand`, `rock`, `woodchips` | `unpaved`, `gravel`, `dirt` |
+| `unknown_value` | każda inna wartość (surowa zachowana) | każda inna wartość (surowa zachowana) |
+| `missing` | brak tagu | lista pusta albo null |
+
+`grass_paver` (graniczny) → `unpaved`, zgodnie z README danych („paved obejmuje asfalt, beton i kostkę”). `unknown_value` daje `status = not_comparable` z `note = "nieznana wartość nawierzchni"` i licznikiem w raporcie. Pełna lista wartości Overture jest potwierdzana testem `SELECT DISTINCT` (ADR-001); nowe wartości trafiają do `unknown_value`, dopóki ten ADR ich nie przypisze.
+
+**Oświetlenie [P2]:** OSM `lit` → `yes` dla {`yes`}; `yes_conditional` dla {`automatic`, `24/7`, `sunset-sunrise`, `limited`, `interval`} (oświetlenie istnieje, ale działa warunkowo; przyjęte za wersją referencyjną prowadzącego, ADR-001 §3.4); `no` dla {`no`, `disused`}; inne → `unknown_value` (`not_comparable`); brak tagu → `missing`. Pytanie do modelu dotyczy widocznej oprawy lampy, więc w porównaniu z odczytem (ADR-004 §3.1) `yes_conditional` jest traktowane jak `yes`, z notatką „`lit` warunkowe” w powodzie. Overture nie ma atrybutu oświetlenia.
 
 ### 3.6 Porównanie OSM ↔ Overture [P3]
 
@@ -113,12 +127,14 @@ Każda funkcja normalizująca zwraca `AttributeValue` (`raw` bez zmian, `normali
 
 | OSM `status` | Overture `status` | `outcome` |
 |---|---|---|
-| `ok` | `ok`, równe | `agree` |
-| `ok` | `ok`, różne | `disagree` |
+| `ok` | `ok`, równe (prędkość: \|Δ\| < 0,5 km/h) | `agree` |
+| `ok` | `ok`, różne (prędkość: \|Δ\| ≥ 0,5 km/h) | `disagree` |
 | `missing` | `ok` | `osm_missing` |
 | `ok` | `missing` | `overture_missing` |
 | `missing` | `missing` | `both_missing` |
 | dowolny `not_comparable` | dowolny | `not_comparable` |
+
+Gdy którakolwiek strona ma `speed_source = implicit`, `ComparisonResult.implicit = true`, a raport i powód kandydata oznaczają wynik jako porównanie z wartością domyślną (np. „OSM `maxspeed=PL:urban` (implicit, 50 km/h)”). `agree`/`disagree` z wartością `implicit` liczymy osobno w podsumowaniu.
 
 `overture_from_osm` = `true`, gdy wartość reguły ma w `sources` wpis `dataset = OpenStreetMap` pokrywający atrybut, `false` przy innym źródle, `null` gdy nie da się ustalić. Raport pokazuje wydanie Overture (`2026-10-21.0`) i datę OSM (`osm_timestamp`). Rozbieżność źródeł nie jest oznaczana jako błąd mapy (F4.4).
 
@@ -184,6 +200,19 @@ Każda funkcja normalizująca zwraca `AttributeValue` (`raw` bez zmian, `normali
 - (+) Mniej fałszywych kandydatów.
 - (-) Kamera skierowana w bok lub panorama daje `not_comparable`.
 **Warunek rewizji:** Gdy dostępna będzie trajektoria sekwencji (kierunek jazdy z kolejnych klatek).
+
+### D-002-4. Wartości domyślne `PL:*` zachowane i oznaczone jako `implicit`
+**Status:** Accepted
+**Data:** 2026-11-12
+**Kontekst:** Wersja referencyjna prowadzącego (ADR-001 §3.3, D-13) nie zamienia `PL:urban` itp. na liczby (fałszywa precyzja: limit zależy od pory doby i typu obszaru). Nasza wersja z 2026-11-03 podstawiała wartości bez rozróżnienia od tagów jawnych. W danych kursu kody `PL:*` są częste na drogach, gdzie kandydat ze zdjęcia ma największą wartość.
+**Decyzja (decyzja użytkownika 2026-11-12):** Zachowujemy wartości z tabeli §3.5 (np. `PL:urban` → 50 km/h), ale każda ma `speed_source = implicit`; porównania i powody kandydatów z wartością `implicit` są tak oznaczone w raporcie, CSV i `ComparisonResult.implicit`. Od prowadzącego przyjmujemy też tolerancję |Δ| < 0,5 km/h i przeliczenie mph z dokładnością 0,01.
+**Odrzucone alternatywy:**
+- `implicit` bez wartości (wersja referencyjna): wszystkie drogi z `PL:*` wypadłyby z porównania jako `not_comparable`, a analityk straciłby kandydatów ze zdjęcia.
+- Wartość bez oznaczenia (nasza wersja 2026-11-03): ukrywa, że porównanie dotyczy wartości ustawowej, nie znaku.
+**Konsekwencje:**
+- (+) Kandydaci na drogach z `PL:*` pozostają widoczni, z jawną adnotacją.
+- (-) Wartość domyślna może nie odpowiadać rzeczywistemu limitowi (pora doby, typ pojazdu); decyzję podejmuje człowiek.
+**Warunek rewizji:** Gdy PRD doda tabelę wartości domyślnych z uzgodnionym źródłem prawnym albo gdy odsetek odrzuconych kandydatów `implicit` w przeglądzie ręcznym przekroczy 50%.
 
 ---
 
@@ -284,11 +313,13 @@ Testy jednostkowe na syntetycznych geometriach z ręcznie policzonymi wynikami (
 | MAT-06 Overture przez record_id | Unit | segment z `sources.record_id = "w123@4"` i bliższy segment bez referencji | wybrany segment z referencją, `osm_source_reference` | referencja > 25 m → `spatial_fallback` |
 | MAT-07 zgodność z referencją | E2E [P1] | 561 zdjęć kursu | odsetek zgodnych `osm_way_id` w profilu; oczekiwane ≥ 95% | 3 zdjęcia bez drogi |
 | MAT-08 flagi nie znikają | E2E | dane kursu | każde zdjęcie z flagą w `photo_road_links.csv` ma flagę w wyniku (kryterium 5) | — |
-| NRM-01 maxspeed tabela | Unit | każda wiersz tabeli §3.5 | `normalized` i `status` z tabeli | `" 50 "` ze spacjami, `50 MPH` |
+| NRM-01 maxspeed tabela | Unit | każdy wiersz tabeli §3.5 | `normalized`, `status`, `speed_source` z tabeli; `30 mph` → 48,28 | `" 50 "` ze spacjami, `50 MPH`, `30mph`; `PL:trunk` → `not_comparable` |
+| NRM-06 tolerancja prędkości | Unit [P3] | OSM 48,28 (z `30 mph`) vs Overture 48; 50 vs 50,4; 50 vs 50,5 | `agree`; `agree`; `disagree` | — |
+| NRM-07 implicit | Unit | OSM `PL:urban`, Overture 50; OSM `PL:urban`, odczyt 40 | `agree` z `implicit = true`; kandydat z powodem zawierającym „implicit” | `PL:zone30` vs 30 |
 | NRM-02 kierunkowe | Unit | `forward=50`, `backward=70`, różne `bearing_diff` | reguła §3.5 | tylko `forward` + `maxspeed` |
 | NRM-03 warunkowe | Unit | `maxspeed=50`, `maxspeed:conditional=30 @ (Mo-Fr 07:00-17:00)` | 50, `conditional_rule_present`, raw zachowany | — |
 | NRM-04 speed_limits | Unit [P3] | reguły z `between` i `when.heading` | reguła §3.5 Overture | dwie różne reguły bez warunków → `not_comparable` |
-| NRM-05 surface/lit | Unit [P2/P5] | wartości z mapy | `paved`/`unpaved`, `yes`/`no` | wartość spoza mapy |
+| NRM-05 surface/lit | Unit [P2/P5] | każdy wiersz tabeli nawierzchni (OSM i Overture), `lit` = `yes`/`automatic`/`no`/`xyz` | klasa z tabeli; `yes`/`yes_conditional`/`no`/`unknown_value` | `Asphalt` (wielkość liter); `bricks`, `chipseal`, `rock`; wartość spoza mapy → `unknown_value`, `not_comparable` |
 | CMP-01 wyniki porównania | Unit [P3] | wszystkie kombinacje tabeli §3.6 | `outcome` z tabeli | — |
 
 ### Techniczne kryteria akceptacji
