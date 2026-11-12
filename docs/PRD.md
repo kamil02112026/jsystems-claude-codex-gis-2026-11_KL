@@ -348,5 +348,5 @@ Sekcje 3–8 opisują docelowe v1. Pierwszy etap (**MVP**) ma jak najszybciej ur
 
 ## 11. Otwarte pytania
 
-- Czy progi pewności 0,8 (poziom 1 i 2) utrzymać wspólne, czy kalibrować osobno per poziom i atrybut po pierwszej próbie?
+- Jakie wartości progów (osobno per poziom, model i atrybut, F5.6) przyjąć po pierwszej kalibracji? Do tego czasu obowiązuje domyślne 0,8.
 - Kto i jak doda etykiety `unpaved`, aby objąć nawierzchnię progiem akceptacji?
