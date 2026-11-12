@@ -9,7 +9,7 @@
 
 ## 1. Zakres
 
-Obejmuje: katalog pytań i dozwolonych odpowiedzi, przygotowanie obrazu, kontrakt żądań do OpenRouter Decisions API (poziom 1, model porównawczy) i Chat Completions (poziom 2), parsowanie i klasyfikację wyników, progi i eskalację, budżet zapytań i kosztu, cache, log kosztów, timeouty i brak ponowień, nagrania prawdziwych odpowiedzi.
+Obejmuje: katalog pytań i dozwolonych odpowiedzi, przygotowanie obrazu (limity Jev, `image_out_of_bounds`), kontrakt żądań do OpenRouter Decisions API (poziom 1, model porównawczy) i Chat Completions (poziom 2), parsowanie i klasyfikację wyników, progi i eskalację, budżet zapytań i kosztu, cache, log kosztów, timeouty i brak ponowień, nagrania prawdziwych odpowiedzi.
 
 Nie obejmuje: reguł kandydatów i kolejki (ADR-004), metryk ewaluacji (ADR-004).
 
@@ -35,6 +35,7 @@ Fakty zweryfikowane i użyte w decyzjach:
 - API Decisions **nie ma** progu, abstencji ani timeoutu — są po stronie klienta.
 - Obraz w Decisions — dokumentacja podaje **dwa** formaty: część `{type: image_url, image_url: {url: data:...}}` w tablicy `state` (przewodnik Multimodal Decisions) oraz `assets.<klucz> = {type: image, format, data_base64}` z odwołaniem do klucza w `state` (OpenAPI). Format rozstrzyga nagranie (D-003-6).
 - Modele Decisions przyjmujące obrazy obejmują `openai/gpt-6-luna-decisions` i `typesafe/jev-1.14` (lista w „Multimodal Decisions”).
+- Jev 1.13/1.14 (przewodnik „Jev”): tylko PNG/JPEG; 256–1568 px na bok; 78 400–2 458 624 px łącznie; 16 MiB na plik; 32 MiB na body; brak obrotu według EXIF. Prawdopodobieństwa różnych modeli nie są porównywalne, więc progi ustawia się osobno dla każdego modelu (przyjęte za wersją referencyjną prowadzącego, ADR-003 §2).
 - Chat: `reasoning: {effort: "medium"}` (enum: `max`, `xhigh`, `high`, `medium`, `low`, `minimal`, `none`); obraz jako część `image_url` z `data:` URL; `response_format` typu `json_schema` (`name`, `schema`, `strict`); `usage` z `prompt_tokens`, `completion_tokens`, `cost`, `completion_tokens_details.reasoning_tokens`.
 - Błędy (OpenAPI): 400, 401, 402, 403, 404, 413, 429, 500, 502, 503, 524, 529; ciało `{error: {code, message, metadata}}`.
 - Cennik według prowadzącego (12.11.2026): `typesafe/jev-1.14` 0,042 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 262K; `openai/gpt-6-luna-decisions` 0,10 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 1,1M. `gpt-6-luna` (poziom 2): **niepotwierdzony**, ustala go nagranie (D-003-6) i `usage.cost`.
@@ -57,9 +58,18 @@ Opisy kryteriów (`criteria`) to krótkie, neutralne definicje etykiet (np. dla 
 
 ### 3.2 Przygotowanie obrazu
 
-- Wejście: plik obrazu z `DataBundle` (wycinek `signs/crops/` albo pełny kadr). Wycinki wysyłane bez zmian. Pełne kadry z dłuższym bokiem > 1024 px skalowane do 1024 px (Pillow, `LANCZOS`), JPEG jakość 90, bez EXIF.
-- `PreparedImage` zawiera **wyłącznie** bajty i typ MIME (`image/jpeg` \| `image/png`) oraz `sha256` pliku źródłowego (do cache, nie wysyłany). Nazwa pliku, `photo_id`, ścieżka i metadane nie są częścią obiektu, więc nie mogą trafić do żądania (F5.1).
-- Wersja przygotowania (`image_prep.v1`) wchodzi do `prompt_version` w kluczu cache.
+Przygotowanie musi spełnić wymagania obrazów Jev (`typesafe/jev-1.14`, model domyślny poziomu 1): tylko PNG/JPEG, 256–1568 px na bok, 78 400–2 458 624 px łącznie, ≤ 16 MiB na plik, model **nie** obraca obrazu według EXIF (przyjęte za wersją referencyjną prowadzącego, ADR-003 §2, §3.2, D-34). Jeden przygotowany obraz na plik źródłowy trafia do **wszystkich** modeli i poziomów (poziom 1, poziom 2, model porównawczy), aby porównanie modeli mierzyło to samo wejście, także po zamianie poziomu 1 Jev ↔ Luna decisions.
+
+Kroki (`ImagePreparer`, Pillow 13.0.0):
+1. Wejście: plik obrazu z `DataBundle` (wycinek `signs/crops/` albo pełny kadr). Format inny niż PNG/JPEG → `image_out_of_bounds` (bez konwersji formatu).
+2. `ImageOps.exif_transpose` — fizyczny obrót według orientacji EXIF (Jev ignoruje znacznik orientacji).
+3. Skalowanie z zachowaniem proporcji, filtr `LANCZOS`: gdy krótszy bok < 256 px — powiększenie do 256 px (małe wycinki znaków); gdy dłuższy bok > 1568 px — zmniejszenie do 1568 px.
+4. Kontrola po skalowaniu: każdy bok w 256–1568 px, liczba pikseli w 78 400–2 458 624. Niespełnienie (np. skrajne proporcje wycinka, przy których powiększenie krótszego boku wypycha dłuższy ponad 1568 px) → obraz odrzucony ze statusem `image_out_of_bounds`; żadne zapytanie nie jest wysyłane.
+5. Zapis JPEG, jakość 92, bez EXIF i innych metadanych (usuwa też ewentualne GPS). Wynik > 16 MiB → `image_out_of_bounds`.
+
+- `PreparedImage` zawiera **wyłącznie** bajty i typ MIME (`image/jpeg`) oraz `sha256` pliku źródłowego (do cache, nie wysyłany) i wymiary oryginału (do raportu, nie wysyłane). Nazwa pliku, `photo_id`, ścieżka i metadane nie są częścią obiektu, więc nie mogą trafić do żądania (F5.1).
+- Wersja przygotowania (`image_prep.v2`; `v1` = wycinki bez zmian, kadry ≤ 1024 px, JPEG 90) wchodzi do `prompt_version` w kluczu cache, więc zmiana przygotowania unieważnia wcześniejsze wpisy.
+- `image_out_of_bounds` to końcowy status pytania (`CascadeResult.final_status`, `resolved_by = human`), bez wpisu w cache i bez zużycia budżetu; pytanie trafia do kolejki ręcznej jak inne nierozstrzygnięte odczyty (ADR-004 §3.4). Raport pokazuje oryginalny rozmiar obrazu.
 
 ### 3.3 Kontrakt żądań
 
@@ -104,8 +114,9 @@ Odpowiedzi `nie widać`, `nieczytelny`, `brak znaku` z pewnością ≥ progu są
    - `abstain` w pozostałych przypadkach.
 5. Tryb `--no-model`: kaskada nie jest uruchamiana, `final_status = skipped_no_model`; klient HTTP nie jest tworzony, klucz API nie jest wymagany.
 6. Wyjątek w jednym pytaniu (np. uszkodzony obraz) = `invalid_response` z `error_class`; run kontynuuje (F5.7).
+7. Obraz odrzucony przy przygotowaniu (§3.2) → `final_status = image_out_of_bounds`, `resolved_by = human`, żaden poziom nie jest wywoływany.
 
-Progi: `thresholds.<level>.<attribute>`, domyślnie 0,8 dla wszystkich (F5.6). Porównanie `≥`.
+Progi: `thresholds.<level>.<model>.<attribute>` (np. `thresholds.level1."typesafe/jev-1.14".speed_limit`), domyślnie 0,8 (F5.6). Porównanie `≥`. Próg jest przypisany do pary poziom × model, bo prawdopodobieństwa różnych modeli nie są porównywalne (przyjęte za wersją referencyjną prowadzącego, ADR-003 §2, §5.7). Zamiana modelu poziomu 1 (Jev ↔ `openai/gpt-6-luna-decisions`) nie przenosi progu skalibrowanego dla drugiego modelu: brak wpisu dla wybranego modelu = wartość domyślna 0,8 z ostrzeżeniem „próg niekalibrowany dla modelu” w raporcie i `run.json`. Model porównawczy (F5.11) ma własne progi `thresholds.compare.<model>.<attribute>`.
 
 ### 3.6 Budżet
 
@@ -229,6 +240,20 @@ Sygnatury klientów przyjmują tylko `PreparedImage` i `Question` — nie ma par
 - (+) Rozstrzyga format obrazu, nazwę `max_tokens`, obecność `confidence` i realny koszt.
 - (-) Niewielki koszt i potrzeba zgody.
 **Warunek rewizji:** Każda zmiana modelu, endpointu albo `prompt_version` struktury żądania wymaga nowego nagrania.
+
+### D-003-7. Wspólny przygotowany obraz zgodny z limitami Jev
+**Status:** Accepted
+**Data:** 2026-11-12
+**Kontekst:** Poziom 1 to `typesafe/jev-1.14`, który przyjmuje tylko PNG/JPEG 256–1568 px na bok (78 400–2 458 624 px łącznie, ≤ 16 MiB) i nie obraca obrazu według EXIF. Wycinki znaków bywają mniejsze niż 256 px. Poprzednie przygotowanie (`image_prep.v1`) wysyłało wycinki bez zmian.
+**Decyzja:** Jedna transformacja dla wszystkich modeli i poziomów: `exif_transpose`, powiększenie Lanczos do 256 px krótszego boku, zmniejszenie do 1568 px dłuższego boku, JPEG q92 bez metadanych; obraz poza zakresem → `image_out_of_bounds` (§3.2). Wersja `image_prep.v2` w kluczu cache. Progi per poziom × model (§3.5). Przyjęte za wersją referencyjną prowadzącego (ADR-003 D-34).
+**Odrzucone alternatywy:**
+- Oryginalne bajty dla Luna i przeskalowane dla Jev: porównanie modeli mierzyłoby różne wejścia.
+- Odrzucanie małych wycinków zamiast powiększania: większość wycinków `signs/crops/` wypadłaby z ewaluacji.
+**Konsekwencje:**
+- (+) Uczciwe porównanie modeli, usunięte metadane, brak błędów 400 z powodu rozmiaru.
+- (-) Powiększone wycinki mogą być rozmyte; raport pokazuje oryginalny rozmiar.
+- (-) Wpisy cache z `image_prep.v1` nie są używane (jednorazowy koszt ponownych zapytań).
+**Warunek rewizji:** Gdy dokumentacja Jev zmieni limity obrazów albo poziom 1 przejdzie na model bez takich limitów.
 
 ---
 
@@ -362,7 +387,11 @@ Testy integracyjne klientów używają wyłącznie nagrań z D-003-6 (respx). Te
 | BUD-01 limit zapytań | Unit | `max_queries=5`, 20 pytań, wszystkie eskalują | ≤ 5 żądań łącznie, reszta `budget_exceeded` (kryterium 9) | limit osiągnięty między poziomem 1 a 2 |
 | BUD-02 limit kosztu | Unit | `max_usd=0.02`, rezerwa 0,01 | brak zapytania, które przekroczyłoby limit | brak `usage.cost` → rezerwa, `cost_estimated` |
 | CAC-01 ponowny run | Integration | dwa runy, ten sam cache | drugi run 0 żądań HTTP, `costs.jsonl` bez `miss`, koszt 0 (kryterium 8) | zmiana progu → 0 żądań, inny status |
-| CAC-02 klucz | Unit | zmiana modelu / effort / `prompt_version` / obrazu | inny klucz | ten sam obraz, inna nazwa pliku → ten sam klucz |
+| CAC-02 klucz | Unit | zmiana modelu / effort / `prompt_version` / obrazu / wersji `image_prep` | inny klucz | ten sam obraz, inna nazwa pliku → ten sam klucz |
+| IMG-01 przygotowanie obrazu | Unit | wycinek 120×140 px; kadr 4000×3000 px; JPEG z orientacją EXIF 6 | krótszy bok 256 px; dłuższy bok 1568 px; poprawna orientacja; wynik JPEG q92 bez EXIF | wynik w granicach 256–1568 px na bok i 78 400–2 458 624 px |
+| IMG-02 `image_out_of_bounds` | Unit | wycinek 40×400 px (po powiększeniu dłuższy bok > 1568); plik GIF | `final_status = image_out_of_bounds`, 0 żądań HTTP, brak wpisu w cache, pozycja kolejki przy drodze OSM | plik > 16 MiB po zapisie |
+| IMG-03 ten sam obraz dla modeli | Unit | pytanie eskalowane do poziomu 2 i tryb porównawczy | bajty obrazu w żądaniu poziomu 1, poziomu 2 i modelu porównawczego są identyczne | — |
+| THR-01 progi per model | Unit | próg `level1.jev.speed_limit = 0.9`, poziom 1 przełączony na `openai/gpt-6-luna-decisions` | użyty próg domyślny 0,8 z ostrzeżeniem „próg niekalibrowany”, nie 0,9 | `--threshold-l1` nadpisuje próg tylko dla bieżącego modelu |
 | CAC-03 błędy poza cache | Unit | `model_unavailable` | brak wpisu w cache | — |
 | LOG-01 log kosztów | Unit | run z 3 pytaniami | 1 wiersz na próbę, wszystkie pola F5.10, brak klucza API i base64 | cache hit ma koszt 0 |
 | SEC-01 sekret | Integration | `OPENROUTER_API_KEY=TEST_SECRET_...` | sekret tylko w nagłówku żądania; brak w logach, cache, nagraniach, wyjątkach | wyjątek httpx z requestem w repr |

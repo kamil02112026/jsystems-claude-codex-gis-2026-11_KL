@@ -69,7 +69,7 @@ Liczby z przecinkiem dziesiętnym (format polski), dwa miejsca po przecinku dla 
 ### 3.4 Kolejka ręczna (F6.5–F6.7)
 
 - `item_id` = pierwsze 16 znaków hex `sha256("{photo_sha256}|{attribute}|{osm_way_id}")` — stabilne między runami (kryterium 14).
-- Pozycja `nierozstrzygnięty_odczyt` powstaje dla `final_status ∈ {abstain, model_unavailable, budget_exceeded}` i `osm_way_id` nie null (D10-I4). Jedna para zdjęcie × atrybut daje najwyżej jedną pozycję.
+- Pozycja `nierozstrzygnięty_odczyt` powstaje dla `final_status ∈ {abstain, model_unavailable, budget_exceeded, image_out_of_bounds}` i `osm_way_id` nie null (D10-I4). Jedna para zdjęcie × atrybut daje najwyżej jedną pozycję.
 - `manual_queue.csv`: UTF-8 z BOM (poprawne polskie znaki w Excelu na Windows), separator `,`, cytowanie RFC 4180, nagłówek w kolejności:
   `item_id, typ, atrybut, priorytet, powod, photo_id, photo_path, photo_captured_at, photo_author, photo_license, photo_source_url, osm_way_id, overture_id, osm_raw, osm_normalized, overture_raw, overture_normalized, l1_model, l1_answer, l1_probability, l1_status, l2_model, l2_answer, l2_probability, l2_status, resolved_by, final_status, link_flags, decyzja, wartość_z_terenu, komentarz`.
   Ostatnie trzy kolumny puste. Listy (flagi) łączone `;`.
@@ -87,7 +87,7 @@ Liczby z przecinkiem dziesiętnym (format polski), dwa miejsca po przecinku dla 
 Sekcje `report.md` w tej kolejności (nagłówki po polsku):
 1. **Parametry uruchomienia** — bbox, atrybuty, zestaw, źródło (`SourceDescriptor`, F7.6), modele i effort, progi, limity, `run_id`, wersja narzędzia.
 2. **Profil danych** — liczności per zbiór (total / w bbox), kompletność `maxspeed`, `surface`, `lit` jako „x% (n/N)”, odrzucone rekordy według przyczyny, ostrzeżenia, zgodność połączeń z referencją [P1].
-3. **Lejek kaskady** — per atrybut: pytania ogółem → rozstrzygnięte na poziomie 1 → eskalowane → rozstrzygnięte na poziomie 2 → przekazane człowiekowi; liczby i odsetki z mianownikiem; osobno `abstain`, `model_unavailable`, `budget_exceeded`, `skipped_no_model`.
+3. **Lejek kaskady** — per atrybut: pytania ogółem → rozstrzygnięte na poziomie 1 → eskalowane → rozstrzygnięte na poziomie 2 → przekazane człowiekowi; liczby i odsetki z mianownikiem; osobno `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds`, `skipped_no_model`.
 4. **Podsumowanie kandydatów** — tabela atrybut × priorytet; liczba nieporównywalnych z powodami.
 5. **Kolejka ręcznej weryfikacji** — wiersze jak w F7.3: drogi (OSM way z linkiem `https://www.openstreetmap.org/way/<id>`, Overture id), miniatura (`thumbs/…`) z atrybucją (autor, licencja, link źródłowy), data zdjęcia, wartości surowe i znormalizowane, odczyt z pewnością i poziomem (przy eskalacji także odpowiedź poziomu 1), flagi, powód. Dla > 200 pozycji raport pokazuje pierwsze 200 i odsyła do CSV.
 6. **Rozbieżności znak ↔ OSM (MVP)** — liczba par z etykietą `certain` różną od OSM (oczekiwane 46 na danych kursu) i ich rozkład: potwierdzone pewnym odczytem modelu, przekazane człowiekowi (z przyczyną), odczytane inaczej niż etykieta.
@@ -112,7 +112,7 @@ Liczone per pytanie (prędkość: wycinki, pełne kadry osobno; nawierzchnia; o�
 | Metryka | Licznik | Mianownik |
 |---|---|---|
 | Trafność kaskady | `resolved` z `final_answer` = etykieta | `resolved` |
-| Odsetek przekazania człowiekowi | `final_status ∈ {abstain, model_unavailable, budget_exceeded}` | pytania z etykietą `certain` |
+| Odsetek przekazania człowiekowi | `final_status ∈ {abstain, model_unavailable, budget_exceeded, image_out_of_bounds}` | pytania z etykietą `certain` |
 | Odsetek eskalacji do poziomu 2 | pytania z poziomem 1 ≠ `confident` | pytania z etykietą `certain` |
 | Trafność poziomu 1 | poziom 1 `confident` i poprawny | poziom 1 `confident` |
 | Trafność poziomu 2 na eskalowanych | poziom 2 `confident` i poprawny | poziom 2 `confident` (tylko eskalowane) |
@@ -120,14 +120,14 @@ Liczone per pytanie (prędkość: wycinki, pełne kadry osobno; nawierzchnia; o�
 | Poziom 1 bez kaskady | trafność i pokrycie, gdzie poziom 1 ≠ `confident` = abstencja | jak wyżej |
 | Detektor Mapillary (baseline, prędkość) | `mapillary_value` (np. `regulatory--maximum-speed-limit-40--g1` → 40) = etykieta | etykiety `certain` z detekcją |
 
-Każda metryka w `evaluation.json` ma `numerator`, `denominator`, `value` (null przy mianowniku 0), plus liczby: `certain`, `uncertain_excluded`, `abstain`, `model_unavailable`, `budget_exceeded`. Progi akceptacji (§7 PRD) zapisane w `evaluation.json` jako `acceptance` z polem `passed` (bool) per metryka; nawierzchnia bez progu trafności (`passed = null`, adnotacja `no_negative_class`).
+Każda metryka w `evaluation.json` ma `numerator`, `denominator`, `value` (null przy mianowniku 0), plus liczby: `certain`, `uncertain_excluded`, `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds`. Progi akceptacji (§7 PRD) zapisane w `evaluation.json` jako `acceptance` z polem `passed` (bool) per metryka; nawierzchnia bez progu trafności (`passed = null`, adnotacja `no_negative_class`).
 
 ### 3.9 Kalibracja progów
 
 `mapqa eval calibrate` na części `calibration`:
 1. Poziom 1: dla każdego progu z siatki 0,50–0,99 (krok 0,01) liczy trafność poziomu 1 na odpowiedziach ≥ progu; wybiera **najniższy** próg z trafnością ≥ `target_accuracy` (0,90) przy co najmniej 10 odpowiedziach. Brak takiego progu → 1,00 (wszystko eskaluje) i ostrzeżenie.
 2. Poziom 2: pytania eskalowane przy wybranym progu poziomu 1 trafiają do poziomu 2 (z cache albo nowe zapytania w budżecie); próg wybierany tą samą regułą (warunek PRD: trafność poziomu 2 na eskalowanych ≥ 90%).
-3. Wynik: `calibration.json` w katalogu runu (progi per poziom × atrybut, tabela pasm pewności: n, poprawne, trafność). Progi nie są zapisywane automatycznie do konfiguracji — użytkownik przenosi je do `mapqa.toml` **przed** `mapqa eval run --split test` (PRD §7: próg ustalony przed końcową próbą).
+3. Wynik: `calibration.json` w katalogu runu (progi per poziom × model × atrybut — kalibracja dotyczy modelu użytego w runie, ADR-003 §3.5; tabela pasm pewności: n, poprawne, trafność). Progi nie są zapisywane automatycznie do konfiguracji — użytkownik przenosi je do `mapqa.toml` **przed** `mapqa eval run --split test` (PRD §7: próg ustalony przed końcową próbą).
 
 ---
 
@@ -136,7 +136,7 @@ Każda metryka w `evaluation.json` ma `numerator`, `denominator`, `value` (null 
 - `Candidate`, `QueueItem`, `EvaluationReport` — ADR-000 §5.
 - `ReportViewModel`: sekcje §3.6 jako struktury gotowe do renderowania (posortowane listy, sformatowane liczby, ścieżki miniatur); jedyny obiekt przekazywany do Jinja2.
 - `evaluation.json`: `run_id`, `split`, `seed`, `questions` → { `question_id`: { `counts`, `cascade`, `level1`, `level2_escalated`, `level1_standalone`, `baseline_mapillary` (prędkość), `subgroups`, `acceptance`, `notes` } }, `cost` { `total_usd`, `per_level`, `per_query`, `per_candidate`, `estimated` }.
-- `calibration.json`: `split`, `target_accuracy`, `grid`, `thresholds` { `level1` / `level2` → { atrybut: wartość } }, `bands` (tabela), `warnings`.
+- `calibration.json`: `split`, `target_accuracy`, `grid`, `thresholds` { `level1` / `level2` → { model: { atrybut: wartość } } }, `bands` (tabela), `warnings`.
 
 ---
 
@@ -277,7 +277,7 @@ sequenceDiagram
 | CND-04 odpowiedzi bez wartości | Unit | pewne `brak znaku` przy OSM 50 | brak kandydata (D10-I1) | `nie widać` dla lit |
 | CND-05 zgodność | Unit | odczyt = OSM | brak kandydata | — |
 | CND-06 brak drogi | Unit | `osm_way_id = null`, pewny odczyt | brak kandydata i brak pozycji kolejki (F3.4) | — |
-| QUE-01 nierozstrzygnięte | Unit | `abstain`, `model_unavailable`, `budget_exceeded` z drogą | pozycja `nierozstrzygnięty_odczyt` (kryterium 7) | `skipped_no_model` → brak pozycji |
+| QUE-01 nierozstrzygnięte | Unit | `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds` z drogą | pozycja `nierozstrzygnięty_odczyt` (kryterium 7) | `skipped_no_model` → brak pozycji |
 | QUE-02 stabilne id | Unit | dwa runy, inna kolejność wejścia | identyczne `item_id` i kolejność (kryterium 14) | zmiana `run_id` |
 | QUE-03 kolumny | Unit | dowolna kolejka | nagłówek dokładnie §3.4, BOM, 3 puste kolumny decyzji (F6.6) | polskie znaki w powodzie, przecinek w autorze |
 | RPT-01 sekcje | Unit (snapshot) | `ReportViewModel` z fixture | `report.md` ma sekcje §3.6 w kolejności, teksty po polsku | 0 kandydatów → komunikat „Brak kandydatów” |
