@@ -159,3 +159,153 @@ def test_mapillary_speed_value() -> None:  # EVL-03
     assert mapillary_speed("regulatory--no-entry--g1") == "brak znaku"
     assert mapillary_speed("regulatory--end-of-maximum-speed-limit-60--g1") == "brak znaku"
     assert mapillary_speed("") is None
+
+
+# --- T45: etykiety zdjęć (pełne kadry): oświetlenie i prędkość ---------------------------------
+
+from mapqa.evaluation import evaluation_input_files, run_evaluation  # noqa: E402
+from mapqa.evaluation.labels import load_reference_labels  # noqa: E402
+
+MAP_QA = Path(__file__).resolve().parents[3] / "course-materials" / "exercise-data" / "map-qa"
+REFERENCE = MAP_QA / "reference_labels.csv"
+
+
+def _lit_res(photo: str, answer: str | None, final: str = "resolved") -> CascadeResult:
+    attempts = [ModelAttempt(level=1, model="m", answer=answer, probability=0.95, status="confident")]  # type: ignore[arg-type]
+    return CascadeResult(
+        photo_sha256=photo,
+        question_id="street_lamp_visible",
+        attempts=attempts,
+        final_status=final,  # type: ignore[arg-type]
+        final_answer=answer,
+        resolved_by="1" if final == "resolved" else None,  # type: ignore[arg-type]
+    )
+
+
+def test_reference_lit_mapping_and_counts_real_file() -> None:
+    labels = load_reference_labels(REFERENCE, "street_lamp_visible")
+    assert len(labels) == 100
+    certain = [x for x in labels.values() if x.status == "certain"]
+    assert len(certain) == 79
+    assert sum(1 for x in certain if x.value == "tak") == 54
+    assert sum(1 for x in certain if x.value == "nie") == 25
+    assert sum(1 for x in labels.values() if x.status == "uncertain") == 21
+
+
+def test_reference_speed_full_frames_real_file() -> None:
+    labels = load_reference_labels(REFERENCE, "speed_limit_value")
+    assert len(labels) == 20
+    certain = [x for x in labels.values() if x.status == "certain"]
+    assert len(certain) == 14
+    assert {x.value for x in certain} == {"30", "70", "brak znaku"}
+
+
+def test_reference_labels_one_row_per_photo_and_question() -> None:
+    import csv
+
+    with REFERENCE.open(encoding="utf-8-sig", newline="") as fh:
+        keys = [(r["photo_id"], r["question"]) for r in csv.DictReader(fh)]
+    assert len(keys) == len(set(keys))
+
+
+def test_load_reference_labels_maps_yes_no_unknown(tmp_path: Path) -> None:
+    p = tmp_path / "reference_labels.csv"
+    p.write_text(
+        "photo_id,question,label,status,method,reviewer,reviewed_at,note\n"
+        "p1,street_lighting_visible,yes,certain,m,r,,\n"
+        "p2,street_lighting_visible,no,certain,m,r,,\n"
+        "p3,street_lighting_visible,unknown,uncertain,m,r,,\n"
+        "p1,surface,paved,certain,m,r,,\n",
+        encoding="utf-8",
+    )
+    got = load_reference_labels(p, "street_lamp_visible")
+    assert got == {
+        "p1": Label("tak", "certain", ""),
+        "p2": Label("nie", "certain", ""),
+        "p3": Label("unknown", "uncertain", ""),
+    }
+
+
+def test_load_reference_labels_speed_full_frame_mapping(tmp_path: Path) -> None:
+    p = tmp_path / "reference_labels.csv"
+    p.write_text(
+        "photo_id,question,label,status,method,reviewer,reviewed_at,note\n"
+        "p1,speed_limit_value,none,certain,m,r,,\n"
+        "p2,speed_limit_value,30,certain,m,r,,\n"
+        "p3,speed_limit_value,unreadable,certain,m,r,,\n",
+        encoding="utf-8",
+    )
+    got = load_reference_labels(p, "speed_limit_value")
+    assert got["p1"].value == "brak znaku"
+    assert got["p2"].value == "30"
+    assert got["p3"].value == "nieczytelny"
+
+
+def test_load_reference_labels_unknown_question_raises() -> None:
+    with pytest.raises(ContractViolation):
+        load_reference_labels(REFERENCE, "no_such_question")
+
+
+def test_lit_denominators_on_real_labels() -> None:
+    labels = load_reference_labels(REFERENCE, "street_lamp_visible")
+    certain = {p for p, x in labels.items() if x.status == "certain"}
+    # every certain photo resolved with its label -> accuracy 79/79; 21 uncertain excluded
+    results = {p: _lit_res(p, labels[p].value) for p in labels}
+    rep = evaluate(results, labels, question_id="street_lamp_visible")
+    assert rep.question_id == "street_lamp_visible"
+    assert rep.counts.certain == 79 and rep.counts.uncertain_excluded == 21
+    assert (rep.overall.cascade_accuracy.numerator, rep.overall.cascade_accuracy.denominator) == (79, 79)
+    assert (rep.overall.handoff_rate.numerator, rep.overall.handoff_rate.denominator) == (0, 79)
+    assert rep.overall.coverage.denominator == len(certain) == 79
+
+
+def test_lit_subgroups_tak_and_nie() -> None:
+    labels = {"a": Label("tak", "certain"), "b": Label("tak", "certain"), "c": Label("nie", "certain")}
+    results = {"a": _lit_res("a", "tak"), "b": _lit_res("b", "nie"), "c": _lit_res("c", "nie")}
+    rep = evaluate(results, labels, question_id="street_lamp_visible")
+    assert set(rep.subgroups) == {"tak", "nie"}
+    assert (rep.subgroups["tak"].cascade_accuracy.numerator, rep.subgroups["tak"].cascade_accuracy.denominator) == (1, 2)
+    assert (rep.subgroups["nie"].cascade_accuracy.numerator, rep.subgroups["nie"].cascade_accuracy.denominator) == (1, 1)
+
+
+def test_speed_subgroups_unchanged_by_default() -> None:
+    rep = evaluate(_results(), _labels())
+    assert set(rep.subgroups) == {"numbers", "none"}
+    assert rep.question_id == "speed_limit_value"
+
+
+def test_run_evaluation_photos_lit_facade() -> None:
+    labels = load_reference_labels(REFERENCE, "street_lamp_visible")
+    results = {p: _lit_res(p, x.value) for p, x in labels.items() if x.status == "certain"}
+    out = run_evaluation(
+        MAP_QA, results, split_name=None, with_model=True, question_id="street_lamp_visible", dataset="photos"
+    )
+    assert out.report is not None
+    assert out.report.counts.certain == 79
+    assert out.baseline_mapillary is None and out.discrepancies is None
+
+
+def test_evaluation_input_files_photos_includes_reference_and_photos() -> None:
+    files = evaluation_input_files(MAP_QA, dataset="photos")
+    names = {p.name for p in files}
+    assert {"reference_labels.csv", "photos.csv"} <= names
+
+
+def test_evaluation_input_files_signs_default_unchanged() -> None:
+    names = {p.name for p in evaluation_input_files(MAP_QA)}
+    assert "labels.csv" in names and "reference_labels.csv" not in names
+
+
+def test_full_frame_speed_is_descriptive_without_thresholds() -> None:  # PRD §7: pełne kadry opisowo
+    labels = load_reference_labels(REFERENCE, "speed_limit_value")
+    results = {p: _res(p, "resolved", x.value, [_att(1, x.value, "confident")], "1") for p, x in labels.items() if x.status == "certain"}
+    out = run_evaluation(MAP_QA, results, split_name=None, with_model=True, question_id="speed_limit_value", dataset="photos")
+    assert out.report is not None and out.report.counts.certain == 14
+    assert all(v is None for v in out.report.acceptance.values())
+
+
+def test_lit_photos_use_lighting_thresholds() -> None:  # PRD §7: oświetlenie ma progi jak prędkość na wycinkach
+    labels = load_reference_labels(REFERENCE, "street_lamp_visible")
+    results = {p: _lit_res(p, x.value) for p, x in labels.items() if x.status == "certain"}
+    out = run_evaluation(MAP_QA, results, split_name=None, with_model=True, question_id="street_lamp_visible", dataset="photos")
+    assert out.report is not None and out.report.acceptance["cascade_accuracy"] is True

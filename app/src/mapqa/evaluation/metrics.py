@@ -131,12 +131,27 @@ def _acceptance(overall: MetricSet) -> dict[str, bool | None]:
     return out
 
 
+LIGHTING_QUESTION = "street_lamp_visible"
+
+
+def _subgroups(pairs: list[Pair], question_id: str) -> dict[str, MetricSet]:
+    if question_id == LIGHTING_QUESTION:
+        return {v: _metric_set([p for p in pairs if p[0].value == v]) for v in ("tak", "nie")}
+    return {
+        "numbers": _metric_set([p for p in pairs if p[0].value.isdigit()]),
+        "none": _metric_set([p for p in pairs if p[0].value == NO_SIGN]),
+    }
+
+
 def evaluate(
     results: dict[str, CascadeResult],
     labels: dict[str, Label],
     split: dict[str, str] | None = None,
     split_name: str | None = None,
     baseline_mapillary: Metric | None = None,
+    *,
+    question_id: str = "speed_limit_value",
+    with_acceptance: bool = True,
 ) -> EvaluationReport:
     """Metryki dla wyników kaskady (klucz: photo_id) wobec etykiet; tylko `certain` w mianownikach."""
     certain: list[tuple[str, Label, CascadeResult]] = []
@@ -157,15 +172,12 @@ def evaluate(
         **{k: final.count(k) for k in ("abstain", "model_unavailable", "budget_exceeded", "image_out_of_bounds")},
     )
     overall = _metric_set(pairs)
-    subgroups = {
-        "numbers": _metric_set([p for p in pairs if p[0].value.isdigit()]),
-        "none": _metric_set([p for p in pairs if p[0].value == NO_SIGN]),
-    }
     return EvaluationReport(
+        question_id=question_id,
         split=split_name,
         counts=counts,
         overall=overall,
-        subgroups=subgroups,
+        subgroups=_subgroups(pairs, question_id),
         baseline_mapillary=baseline_mapillary,
-        acceptance=_acceptance(overall),
+        acceptance=_acceptance(overall) if with_acceptance else {k: None for k in ACCEPTANCE},
     )
