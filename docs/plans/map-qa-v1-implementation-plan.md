@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **SZKIC — czeka na przegląd właściciela** |
+| Status | **ZAAKCEPTOWANY 2026-11-13** — §0 potwierdzone, U2–U6 = wartości domyślne |
 | Data | 2026-11-13 |
 | Ścieżka | `docs/plans/map-qa-v1-implementation-plan.md` |
 | Gałąź | `map-app-implementation` (śledzi `origin/map-app-implementation`); push tylko do `origin` (fork) |
@@ -20,17 +20,17 @@ Proponowane wartości wymagają potwierdzenia. Pole bez potwierdzenia oznacza **
 
 | Pole | Proponowana wartość | Potwierdzam (T/N/inna) |
 |---|---|---|
-| A1. Maks. USD na jedno płatne uruchomienie (`--max-usd`) | 1,00 USD (domyślnie z PRD F5.9) | |
-| A2. Maks. zapytań / nowych obrazów na uruchomienie | 100 / 25 (PRD F5.9), bez podnoszenia limitów | |
-| A3. Łączny realny koszt całego `/goal` (suma `costs.jsonl`) | **2,00 USD**, po przekroczeniu stop. Realnie ~0,00005 USD za zapytanie, oczekiwane < 0,10 USD | |
-| A4. Maks. liczba płatnych uruchomień w całym `/goal` | 16 (nagrania, kalibracja i test oświetlenia, pełne kadry prędkości, model porównawczy) | |
-| A5. Płatne bramki objęte zgodą | GP1 (nagranie pytania o lampę, ≤ 4 zapytania, ≤ 0,10 USD), GP2 (ewaluacja oświetlenia i pełnych kadrów), GP3 (model porównawczy) | |
-| A6. Sieć: pobranie zdjęć (`download_photos.py`, zapis tylko do `data/photos/`) | tak (GNET); odświeżenie adresów Mapillary tylko z `MAPILLARY_TOKEN` ustawionym przez właściciela | |
-| A7. Sieć: instalacja z PyPI / zmiana `uv.lock` | **nie** (stop i pytanie) | |
-| A8. Databricks | tylko gdy `/goal` działa w oknie PowerShell właściciela ze zmiennymi `DATABRICKS_*`; agent sprawdza wyłącznie ich obecność; bez nich wiersze GDB dostają `blocked:GDB` | |
-| A9. Push | tylko `origin`, gałąź `map-app-implementation`, po każdej zakończonej fazie; nigdy `main` ani `upstream`, bez force-push. Wypełnione i potwierdzone §0 jest jawnym poleceniem push w rozumieniu AGENTS.md (Commit Rules). | |
-| A10. PR | PR do `main` forka na końcu (T58), z pełnym URL; **merge wykonuje człowiek** | |
-| A11. Repozytorium prowadzącego | zakaz jakichkolwiek zmian (push do `upstream` wyłączony); `git show upstream/...` tylko do odczytu | |
+| A1. Maks. USD na jedno płatne uruchomienie (`--max-usd`) | 1,00 USD (domyślnie z PRD F5.9) | **T** (właściciel, 2026-11-13) |
+| A2. Maks. zapytań / nowych obrazów na uruchomienie | 100 / 25 (PRD F5.9), bez podnoszenia limitów | **T** (właściciel, 2026-11-13) |
+| A3. Łączny realny koszt całego `/goal` (suma `costs.jsonl`) | **2,00 USD**, po przekroczeniu stop. Realnie ~0,00005 USD za zapytanie, oczekiwane < 0,10 USD | **T** (właściciel, 2026-11-13) |
+| A4. Maks. liczba płatnych uruchomień w całym `/goal` | 16 (nagrania, kalibracja i test oświetlenia, pełne kadry prędkości, model porównawczy) | **T** (właściciel, 2026-11-13) |
+| A5. Płatne bramki objęte zgodą | GP1 (nagranie pytania o lampę, ≤ 4 zapytania, ≤ 0,10 USD), GP2 (ewaluacja oświetlenia i pełnych kadrów), GP3 (model porównawczy) | **T** (właściciel, 2026-11-13) |
+| A6. Sieć: pobranie zdjęć (`download_photos.py`, zapis tylko do `data/photos/`) | tak (GNET); odświeżenie adresów Mapillary tylko z `MAPILLARY_TOKEN` ustawionym przez właściciela | **T** (właściciel, 2026-11-13) |
+| A7. Sieć: instalacja z PyPI / zmiana `uv.lock` | **nie** (stop i pytanie) | **T** (właściciel, 2026-11-13) |
+| A8. Databricks | tylko gdy `/goal` działa w oknie PowerShell właściciela ze zmiennymi `DATABRICKS_*`; agent sprawdza wyłącznie ich obecność; bez nich wiersze GDB dostają `blocked:GDB` | **T** (właściciel, 2026-11-13) |
+| A9. Push | tylko `origin`, gałąź `map-app-implementation`, po każdej zakończonej fazie; nigdy `main` ani `upstream`, bez force-push. Wypełnione i potwierdzone §0 jest jawnym poleceniem push w rozumieniu AGENTS.md (Commit Rules). | **T** (właściciel, 2026-11-13) |
+| A10. PR | PR do `main` forka na końcu (T58), z pełnym URL; **merge wykonuje człowiek** | **T** (właściciel, 2026-11-13) |
+| A11. Repozytorium prowadzącego | zakaz jakichkolwiek zmian (push do `upstream` wyłączony); `git show upstream/...` tylko do odczytu | **T** (właściciel, 2026-11-13) |
 
 ---
 
@@ -218,6 +218,7 @@ Zasady:
 ## 11. Nierozstrzygnięte decyzje (z proponowaną wartością domyślną)
 
 - **U1 (rozstrzygnięte):** poprawki z przeglądu zostały zintegrowane i zacommitowane (`ed4a44e`).
+- *(2026-11-13: właściciel przyjął wartości domyślne U2–U6.)*
 - **U2, interfejs F5.11:** zgoda na `eval run --compare` i aktualizację A0 §6 / A3 (domyślnie: tak).
 - **U3, `invalid_response` w cache:** zostaje zgodnie z A3 §3.7. Wpis unieważnia zmiana `prompt_version`.
 - **U4, `--attributes surface` przed P5:** domyślnie kod 1 `attribute_not_available` z podpowiedzią.
