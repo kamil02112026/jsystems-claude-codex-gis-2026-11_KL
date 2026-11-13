@@ -95,8 +95,10 @@ def _metric_set(pairs: list[Pair]) -> MetricSet:
         return _confident(a) and a is not None and a.answer == l.value
 
     def l1_not_conf(_l: Label, r: CascadeResult) -> bool:
+        """Escalated to level 2: only below_threshold / invalid_response (ADR-003 §3.5).
+        model_unavailable and budget_exceeded on level 1 stop the cascade and are not escalations."""
         a = _level(r, 1)
-        return a is not None and a.status != "confident"
+        return a is not None and a.status in ("below_threshold", "invalid_response")
 
     def l2_conf(l: Label, r: CascadeResult) -> bool:
         return l1_not_conf(l, r) and _confident(_level(r, 2))

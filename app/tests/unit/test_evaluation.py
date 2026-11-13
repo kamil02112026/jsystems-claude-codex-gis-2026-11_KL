@@ -102,7 +102,8 @@ def test_evaluate_denominators() -> None:  # EVL-02
     o = rep.overall
     assert (o.cascade_accuracy.numerator, o.cascade_accuracy.denominator) == (2, 3)
     assert (o.handoff_rate.numerator, o.handoff_rate.denominator) == (2, 5)
-    assert (o.escalation_rate.numerator, o.escalation_rate.denominator) == (3, 5)
+    # only below_threshold / invalid_response go to level 2 (ADR-003 §3.5); model_unavailable on L1 does not (f)
+    assert (o.escalation_rate.numerator, o.escalation_rate.denominator) == (2, 5)
     assert (o.level1_accuracy.numerator, o.level1_accuracy.denominator) == (1, 2)
     assert (o.level2_escalated_accuracy.numerator, o.level2_escalated_accuracy.denominator) == (1, 1)
     assert (o.coverage.numerator, o.coverage.denominator) == (2, 5)
@@ -110,6 +111,18 @@ def test_evaluate_denominators() -> None:  # EVL-02
     assert (o.level1_standalone_coverage.numerator, o.level1_standalone_coverage.denominator) == (1, 5)
     assert o.level1_standalone_abstain_rate.numerator == 3
     assert o.cascade_accuracy.value == pytest.approx(2 / 3)
+
+
+def test_budget_exceeded_is_not_escalation() -> None:
+    """Found in the first paid run (2026-11-13): 94 budget refusals were reported as 'escalated to level 2'."""
+    labels = {"a": Label("50", "certain", ""), "b": Label("30", "certain", "")}
+    results = {
+        "a": _res("a", "resolved", "50", [_att(1, "50", "confident")], "1"),
+        "b": _res("b", "budget_exceeded", None, [_att(1, None, "budget_exceeded", None)], "human"),
+    }
+    o = evaluate(results, labels).overall
+    assert (o.escalation_rate.numerator, o.escalation_rate.denominator) == (0, 2)
+    assert o.handoff_rate.numerator == 1  # budget_exceeded still counts as handed to a human (D10-I4)
 
 
 def test_evaluate_subgroups() -> None:
