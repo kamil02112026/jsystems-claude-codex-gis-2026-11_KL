@@ -167,6 +167,12 @@ def validate_run_args(args: argparse.Namespace) -> tuple[Bbox | None, list[str]]
     unknown = [a for a in attributes if a not in ATTRIBUTES]
     if unknown or not attributes:
         raise ValidationError(f"Nieznany atrybut: {', '.join(unknown) or '(pusty)'}", code="invalid_attribute", hint="Dozwolone: " + ", ".join(ATTRIBUTES))
+    if "surface" in attributes:  # PRD §9 P5, §11; plan v1 T56 / U4
+        raise ValidationError(
+            "Nawierzchnia jest dostępna od przyrostu P5: brak etykiet `unpaved`, więc nie da się zmierzyć jakości odczytu",
+            code="attribute_not_available",
+            hint="Uruchom bez surface, np. --attributes speed_limit",
+        )
     not_mvp = [a for a in attributes if a not in MVP_ATTRIBUTES]
     if not_mvp:
         raise ValidationError(f"Atrybut niedostępny w MVP: {', '.join(not_mvp)}", code="invalid_attribute", hint="MVP obsługuje speed_limit (PRD §9)")

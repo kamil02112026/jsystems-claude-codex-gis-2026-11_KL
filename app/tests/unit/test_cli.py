@@ -82,6 +82,13 @@ def test_unknown_attribute_exit_1(capsys) -> None:
     assert _json(capsys)["error"]["code"] == "invalid_attribute"
 
 
+def test_surface_is_blocked_until_unpaved_labels_exist(capsys) -> None:  # plan v1 T56, U4; PRD §9 P5, §11
+    assert main(["run", "--attributes", "surface", "--output", "json"]) == 1
+    err = _json(capsys)["error"]
+    assert err["code"] == "attribute_not_available"
+    assert "unpaved" in err["message"] and "P5" in err["message"]
+
+
 def test_mvp_rejects_photos_dataset(capsys) -> None:
     assert main(["run", "--dataset", "photos", "--output", "json"]) == 1
     assert _json(capsys)["error"]["code"] == "dataset_not_available"

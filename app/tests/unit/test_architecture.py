@@ -70,6 +70,10 @@ def check_metric_sql(files: list[Path]) -> list[str]:
     for path, text in sql_texts:
         for m in re.finditer(r"ST_(Distance|DWithin)\s*\(([^)]*)\)", text):
             args = m.group(2)
+            # matching/crs.py is the single sanctioned SQL builder: it validates the _2180 suffix at runtime
+            # (TAC-002-01 test), so f-string placeholders are allowed there and nowhere else
+            if path.name == "crs.py" and re.fullmatch(r"\s*\{\w+\}\s*,\s*\{\w+\}\s*", args):
+                continue
             if "_2180" not in args:
                 bad.append(f"{path.name}: {m.group(0)}")
         for m in re.finditer(r"ST_Transform\s*\(([^;]*?)\)", text):
