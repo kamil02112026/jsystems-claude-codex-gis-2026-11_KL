@@ -82,3 +82,45 @@ def test_registry_and_lookup() -> None:
 def test_question_is_frozen() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         SPEED_LIMIT_VALUE.text = "x"  # type: ignore[misc]
+
+
+STREET_LAMP_OPTIONS = ("tak", "nie", "nie widać")
+
+
+def test_street_lamp_question_matches_adr_and_prd() -> None:
+    from mapqa.questions.catalog import STREET_LAMP_VISIBLE
+
+    q = STREET_LAMP_VISIBLE
+    assert q.question_id == "street_lamp_visible"
+    assert q.attribute == "lit"
+    assert q.text == "Czy w kadrze widać oprawę lampy ulicznej?"
+    assert q.options == STREET_LAMP_OPTIONS
+    assert q.value_options == ("tak", "nie")
+    assert q.label_map == {"yes": "tak", "no": "nie"}
+
+
+def test_street_lamp_criteria_cover_every_option_with_text() -> None:
+    from mapqa.questions.catalog import STREET_LAMP_VISIBLE
+
+    q = STREET_LAMP_VISIBLE
+    assert set(q.criteria) == set(q.options)
+    assert all(text.strip() for text in q.criteria.values())
+    assert "słup" in q.criteria["nie"] or "słup" in q.criteria["tak"]
+
+
+def test_street_lamp_prompt_version_has_own_base_and_image_prep() -> None:
+    from mapqa.questions.catalog import STREET_LAMP_VISIBLE
+
+    assert re.fullmatch(r"street_lamp_visible\.v1-[0-9a-f]{8}\+image_prep\.v2", STREET_LAMP_VISIBLE.prompt_version)
+
+
+def test_street_lamp_is_registered() -> None:
+    from mapqa.questions.catalog import STREET_LAMP_VISIBLE
+
+    assert QUESTIONS["street_lamp_visible"] is STREET_LAMP_VISIBLE
+    assert get_question("street_lamp_visible") is STREET_LAMP_VISIBLE
+
+
+def test_speed_prompt_version_unchanged() -> None:
+    # Zmiana tej wartości unieważnia cache speed_limit_value (ADR-003 §3.7).
+    assert SPEED_LIMIT_VALUE.prompt_version == "speed_limit_value.v1-b6da2dc6+image_prep.v2"

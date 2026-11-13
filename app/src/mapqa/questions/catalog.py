@@ -68,7 +68,33 @@ SPEED_LIMIT_VALUE = Question(
     },
 )
 
-QUESTIONS: dict[str, Question] = {SPEED_LIMIT_VALUE.question_id: SPEED_LIMIT_VALUE}
+STREET_LAMP_BASE_VERSION = "street_lamp_visible.v1"
+_LAMP_TEXT = "Czy w kadrze widać oprawę lampy ulicznej?"
+_LAMP_VALUES = ("tak", "nie")
+_LAMP_CRITERIA: dict[str, str] = {
+    "tak": "W kadrze widać oprawę lampy ulicznej, czyli rozpoznawalną lampę oświetleniową na słupie lub wysięgniku",
+    "nie": "Widok pozwala ocenić, że w kadrze nie ma oprawy lampy ulicznej; sam słup energetyczny lub telefoniczny bez oprawy nie wystarcza",
+    "nie widać": "Ujęcie nie pozwala rozstrzygnąć, czy w kadrze jest oprawa lampy ulicznej (np. ciemno, zasłonięte, zbyt daleko)",
+}
+_LAMP_OPTIONS = (*_LAMP_VALUES, "nie widać")
+
+STREET_LAMP_VISIBLE = Question(
+    question_id="street_lamp_visible",
+    attribute="lit",
+    prompt_version=prompt_version_for(
+        _LAMP_TEXT, _LAMP_OPTIONS, _LAMP_CRITERIA, base=STREET_LAMP_BASE_VERSION
+    ),
+    text=_LAMP_TEXT,
+    options=_LAMP_OPTIONS,
+    value_options=_LAMP_VALUES,
+    criteria=_LAMP_CRITERIA,
+    label_map={"yes": "tak", "no": "nie"},
+)
+
+QUESTIONS: dict[str, Question] = {
+    SPEED_LIMIT_VALUE.question_id: SPEED_LIMIT_VALUE,
+    STREET_LAMP_VISIBLE.question_id: STREET_LAMP_VISIBLE,
+}
 
 
 def get_question(question_id: str) -> Question:
