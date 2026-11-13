@@ -225,6 +225,8 @@ def _model_phase(
         if budget.circuit_open:
             skipped = sum(1 for r in results.values() for a in r.attempts if a.error_class == "circuit_open")
             warnings.append(f"circuit_open: {budget.circuit_error_class}, {skipped} pytań")
+        if hasattr(port, "close"):
+            port.close()  # one HTTP client per run (ADR-003 §3.3)
         return _ModelPhase(results, confirmation, manifest, budget, warnings, cascade.uncalibrated_warnings(), hits)
     finally:
         cache.close()
