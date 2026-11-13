@@ -53,7 +53,7 @@ Fakty zweryfikowane 2026-11-12 (`reports/map-qa/profile.md`):
 4. **Walidacja per typ:** `files` wymaga `path`; `databricks` wymaga `access ∈ {rest, cli}`, `schema` w formacie `katalog.schemat`, `host_env`, `warehouse_id_env`, `photos_dir`; dla `rest` także `token_env`. Pola `*_env` zawierają **nazwy** zmiennych, walidowane regexem `^[A-Z_][A-Z0-9_]*$` (odrzuca przypadkowe wklejenie tokenu).
 5. **Opcje zapytań Databricks:** `query_timeout_s` (domyślnie 180), `poll_interval_s` (domyślnie 2), `wait_timeout_s` (domyślnie 30, dozwolone 5–50).
 
-Brak przełączania źródła po cichu (F1.3): błąd źródła kończy run kodem 2 z podpowiedzią (`hint`) innego skonfigurowanego źródła, np. „Użyj `--source local`”.
+Brak przełączania źródła po cichu (F1.3): błąd źródła kończy run kodem 2 z podpowiedzią (`hint`) innego skonfigurowanego źródła, np. „Użyj `--source files`”.
 
 ### 3.2 Port `SourceAdapter`
 
@@ -343,5 +343,5 @@ Nagrania Databricks (`tests/fixtures/captures/databricks/`) powstają z prawdziw
 - TAC-001-03: W żadnym teście z fałszywym tokenem wzorzec tokenu nie występuje w wyjątkach, logach, `run.json`, raportach ani nagraniach.
 - TAC-001-04: Adapter `databricks` wykonuje dokładnie 1 `POST /api/2.0/sql/statements` na zbiór w każdym scenariuszu błędu (licznik tras respx).
 - TAC-001-05: Bbox trafia do SQL wyłącznie przez `parameters`; test sprawdza, że tekst `statement` nie zawiera wartości liczbowych bbox.
-- TAC-001-07: `app/tests/fixtures/schema_expected.json` istnieje, ma datę i `sha256` plików źródłowych oraz sekcję `distinct_values`; powstał z rzeczywistego `DESCRIBE`, nie z dokumentacji.
 - TAC-001-06: `--no-model` na `files` i `databricks` z tymi samymi danymi daje identyczną listę id kandydatów i liczności (pomijając `SourceDescriptor`) [P1].
+- TAC-001-07: `app/tests/fixtures/schema_expected.json` istnieje, ma datę i `sha256` plików źródłowych oraz sekcję `distinct_values`; powstał z rzeczywistego `DESCRIBE`, nie z dokumentacji.

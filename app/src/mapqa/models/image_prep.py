@@ -64,7 +64,7 @@ def prepare_image(path: Path) -> PreparedImage:
 
 
 def _target_size(width: int, height: int) -> tuple[int, int]:
-    """Upscale until BOTH minima hold (short side ≥ 256 and pixels ≥ 78 400), or downscale the long side to 1568.
+    """Upscale until BOTH minima hold (short side ≥ 280 and pixels ≥ 78 400), or downscale the long side to 1568.
 
     Upscaling only the short side to 256 would leave square sign crops at 256×256 = 65 536 px,
     below Jev's pixel minimum (78 400 = 280²); this rejected 105 of 119 course crops.

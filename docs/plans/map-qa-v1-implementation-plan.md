@@ -28,7 +28,7 @@ Proponowane wartości wymagają potwierdzenia. Pole bez potwierdzenia oznacza **
 | A6. Sieć: pobranie zdjęć (`download_photos.py`, zapis tylko do `data/photos/`) | tak (GNET); odświeżenie adresów Mapillary tylko z `MAPILLARY_TOKEN` ustawionym przez właściciela | |
 | A7. Sieć: instalacja z PyPI / zmiana `uv.lock` | **nie** (stop i pytanie) | |
 | A8. Databricks | tylko gdy `/goal` działa w oknie PowerShell właściciela ze zmiennymi `DATABRICKS_*`; agent sprawdza wyłącznie ich obecność; bez nich wiersze GDB dostają `blocked:GDB` | |
-| A9. Push | tylko `origin`, gałąź `map-app-implementation`, po każdej zakończonej fazie; nigdy `main` ani `upstream`, bez force-push | |
+| A9. Push | tylko `origin`, gałąź `map-app-implementation`, po każdej zakończonej fazie; nigdy `main` ani `upstream`, bez force-push. Wypełnione i potwierdzone §0 jest jawnym poleceniem push w rozumieniu AGENTS.md (Commit Rules). | |
 | A10. PR | PR do `main` forka na końcu (T58), z pełnym URL; **merge wykonuje człowiek** | |
 | A11. Repozytorium prowadzącego | zakaz jakichkolwiek zmian (push do `upstream` wyłączony); `git show upstream/...` tylko do odczytu | |
 

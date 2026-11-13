@@ -2,7 +2,7 @@
 
 ## Project
 
-This is a **course project** for the "AI dla programistów: agenci AI w pracy z danymi GIS (Claude Code i Codex)" training organized by JSystems, 4 dni w dwóch blokach po 2 dni (2-3.11 i 12-13.11.2026), remote on cloud VMs. The taught agents are Claude Code and OpenAI Codex CLI, used from the terminal; GitHub Copilot and Cursor are covered only as comparisons. The participants are GIS / data engineers. The course project is a Python data-quality pipeline built in `app/`, using synthetic GIS inputs (points of interest, road segments, districts) in `course-materials/exercise-data/gis/` and real Kraków map QA data (OSM/Overture roads and street photos) in `course-materials/exercise-data/map-qa/`. Agents may read both input folders without being asked. Stack: Python 3.12 managed with uv, pandas, GeoPandas, Shapely, pyproj, DuckDB with the spatial extension, pytest. Raw input files are read-only. Work flows: data discovery → spec / PRD → plan → implementation with tests → review.
+This is a **course project** for the "AI dla programistów: agenci AI w pracy z danymi GIS (Claude Code i Codex)" training organized by JSystems, 4 dni w dwóch blokach po 2 dni (2-3.11 i 12-13.11.2026), remote on cloud VMs. The taught agents are Claude Code and OpenAI Codex CLI, used from the terminal; GitHub Copilot and Cursor are covered only as comparisons. The participants are GIS / data engineers. The course project is a Python data-quality pipeline built in `app/`, using synthetic GIS inputs (points of interest, road segments, districts) in `course-materials/exercise-data/gis/` and real Kraków map QA data (OSM/Overture roads and street photos) in `course-materials/exercise-data/map-qa/`. Agents may read both input folders without being asked. Stack: Python 3.12 managed with uv, DuckDB with the spatial extension, pyarrow, pytest; GeoPandas/pyproj only as test oracles (ADR-000 D2). Raw input files are read-only. Work flows: data discovery → spec / PRD → plan → implementation with tests → review.
 
 This is only the **base starting repository** for the course; concrete decisions are made live with the group.
 
@@ -87,7 +87,7 @@ Verify only the scope relevant to your change. If the change affects runtime beh
 | Type | Mocks | Who |
 |---|---|---|
 | Unit | All deps | be/fe-dev |
-| Integration | Only external LLM API | be-dev |
+| Integration | Only external APIs (OpenRouter, Databricks), mocks derived from real captures | be-dev |
 | E2E | NOTHING (real stack) | qa-engineer |
 
 **Verification:** For runtime changes, start the real application and finish with Manual QA. Record compilation/build, test execution and startup as separate checks, including discovery counts and skips. A successful build or E2E run alone does not establish that the app works. Documentation-only changes use diff, link and consistency checks and do not require application startup. Fix errors and warnings introduced by the change; report pre-existing failures without hiding them.
@@ -95,7 +95,7 @@ Verify only the scope relevant to your change. If the change affects runtime beh
 **Env Vars:** No model API key is required for the synthetic GIS starter, PRD or normal Claude Code/Codex CLI use on the provided accounts. `.env.example` contains optional settings for an explicitly selected API exercise; `OPENROUTER_API_KEY` is needed only when that exercise actually calls OpenRouter.
 
 ### Map QA data profile
-- Refresh the input data profile with `uv run course-materials/exercise-data/map-qa/profile_data.py` (read-only DuckDB queries from `profile.sql`, ~1 min) instead of writing ad-hoc profiling queries.
+- Refresh the input data profile with `uv run --python 3.12 course-materials/exercise-data/map-qa/profile_data.py` (read-only DuckDB queries from `profile.sql`, ~5–60 s) instead of writing ad-hoc profiling queries.
 - The curated summary lives in `reports/map-qa/profile.md` (committed); other files under `reports/` are generated and git-ignored. Update the profile when input data or `profile.sql` changes, and check PRD/ADR assumptions against it.
 
 ### Commit Rules
@@ -106,6 +106,7 @@ Verify only the scope relevant to your change. If the change affects runtime beh
 - Do **not** push to remote unless the user explicitly asks.
 
 ### Git Worktrees
+- Location convention shared by Claude, Codex and OpenCode: `../<project-folder>-worktrees/<branch>` (e.g. `D:/project-worktrees/feature-x/`); move worktrees only with `git worktree move`.
 - Use this checkout by default. Create a worktree only when requested or needed for parallel agent work; ask first when not explicitly requested.
 - Remove worktrees with `git worktree remove <path>` and run `git worktree prune` when done.
 

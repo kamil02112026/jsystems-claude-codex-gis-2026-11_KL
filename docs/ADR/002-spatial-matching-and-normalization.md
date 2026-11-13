@@ -151,7 +151,7 @@ Wiersze z mph, jednostkami i wieloma wartościami zostają jako zabezpieczenie: 
 | `missing` | `missing` | `both_missing` |
 | dowolny `not_comparable` | dowolny | `not_comparable` |
 
-Gdy którakolwiek strona ma `speed_source = implicit`, `ComparisonResult.implicit = true`, a raport i powód kandydata oznaczają wynik jako porównanie z wartością domyślną (np. „OSM `maxspeed=PL:urban` (implicit, 50 km/h)”). `agree`/`disagree` z wartością `implicit` liczymy osobno w podsumowaniu.
+Gdy którakolwiek strona ma `speed_source = implicit`, `ComparisonResult.implicit = true`, a raport i powód kandydata oznaczają wynik jako porównanie z wartością domyślną (np. „OSM `maxspeed:type=PL:urban` (implicit, 50 km/h)”). `agree`/`disagree` z wartością `implicit` liczymy osobno w podsumowaniu.
 
 `overture_from_osm` = `true`, gdy wartość reguły ma w `sources` wpis `dataset = OpenStreetMap` pokrywający atrybut, `false` przy innym źródle, `null` gdy nie da się ustalić. Raport pokazuje wydanie Overture (`2026-10-21.0`) i datę OSM (`osm_timestamp`). Rozbieżność źródeł nie jest oznaczana jako błąd mapy (F4.4).
 

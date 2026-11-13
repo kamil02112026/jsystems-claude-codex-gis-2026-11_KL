@@ -35,10 +35,10 @@ Fakty zweryfikowane i użyte w decyzjach:
 - API Decisions **nie ma** progu, abstencji ani timeoutu — są po stronie klienta.
 - Obraz w Decisions — dokumentacja podaje **dwa** formaty: część `{type: image_url, image_url: {url: data:...}}` w tablicy `state` (przewodnik Multimodal Decisions) oraz `assets.<klucz> = {type: image, format, data_base64}` z odwołaniem do klucza w `state` (OpenAPI). Format rozstrzyga nagranie (D-003-6).
 - Modele Decisions przyjmujące obrazy obejmują `openai/gpt-6-luna-decisions` i `typesafe/jev-1.14` (lista w „Multimodal Decisions”).
-- Jev 1.13/1.14 (przewodnik „Jev”): tylko PNG/JPEG; 256–1568 px na bok; 78 400–2 458 624 px łącznie; 16 MiB na plik; 32 MiB na body; brak obrotu według EXIF. Prawdopodobieństwa różnych modeli nie są porównywalne, więc progi ustawia się osobno dla każdego modelu (przyjęte za wersją referencyjną prowadzącego, ADR-003 §2).
+- Jev 1.13/1.14 (przewodnik „Jev”): tylko PNG/JPEG; 280–1568 px na bok (dokumentacja Jev podaje 256; pomiar 2026-11-13); 78 400–2 458 624 px łącznie; 16 MiB na plik; 32 MiB na body; brak obrotu według EXIF. Prawdopodobieństwa różnych modeli nie są porównywalne, więc progi ustawia się osobno dla każdego modelu (przyjęte za wersją referencyjną prowadzącego, ADR-003 §2).
 - Chat: `reasoning: {effort: "medium"}` (enum: `max`, `xhigh`, `high`, `medium`, `low`, `minimal`, `none`); obraz jako część `image_url` z `data:` URL; `response_format` typu `json_schema` (`name`, `schema`, `strict`); `usage` z `prompt_tokens`, `completion_tokens`, `cost`, `completion_tokens_details.reasoning_tokens`.
 - Błędy (OpenAPI): 400, 401, 402, 403, 404, 413, 429, 500, 502, 503, 524, 529; ciało `{error: {code, message, metadata}}`.
-- Cennik według prowadzącego (12.11.2026): `typesafe/jev-1.14` 0,042 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 262K; `openai/gpt-6-luna-decisions` 0,10 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 1,1M. `gpt-6-luna` (poziom 2): **niepotwierdzony**, ustala go nagranie (D-003-6) i `usage.cost`.
+- Cennik według prowadzącego (12.11.2026): `typesafe/jev-1.14` 0,042 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 262K; `openai/gpt-6-luna-decisions` 0,10 USD/mln tokenów wejścia, wyjście 0 USD, kontekst 1,1M. `gpt-6-luna` (poziom 2): 0,0000481 USD za zapytanie (nagranie 2026-11-13).
 
 ---
 
@@ -58,15 +58,15 @@ Opisy kryteriów (`criteria`) to krótkie, neutralne definicje etykiet (np. dla 
 
 ### 3.2 Przygotowanie obrazu
 
-Przygotowanie musi spełnić wymagania obrazów Jev (`typesafe/jev-1.14`, model domyślny poziomu 1): tylko PNG/JPEG, 256–1568 px na bok, 78 400–2 458 624 px łącznie, ≤ 16 MiB na plik, model **nie** obraca obrazu według EXIF (przyjęte za wersją referencyjną prowadzącego, ADR-003 §2, §3.2, D-34). Jeden przygotowany obraz na plik źródłowy trafia do **wszystkich** modeli i poziomów (poziom 1, poziom 2, model porównawczy), aby porównanie modeli mierzyło to samo wejście, także po zamianie poziomu 1 Jev ↔ Luna decisions.
+Przygotowanie musi spełnić wymagania obrazów Jev (`typesafe/jev-1.14`, model domyślny poziomu 1): tylko PNG/JPEG, 280–1568 px na bok (dokumentacja Jev podaje 256; pomiar 2026-11-13), 78 400–2 458 624 px łącznie, ≤ 16 MiB na plik, model **nie** obraca obrazu według EXIF (przyjęte za wersją referencyjną prowadzącego, ADR-003 §2, §3.2, D-34). Jeden przygotowany obraz na plik źródłowy trafia do **wszystkich** modeli i poziomów (poziom 1, poziom 2, model porównawczy), aby porównanie modeli mierzyło to samo wejście, także po zamianie poziomu 1 Jev ↔ Luna decisions.
 
 Kroki (`ImagePreparer`, Pillow 12.0.0):
 1. Wejście: plik obrazu z `DataBundle` (wycinek `signs/crops/` albo pełny kadr). Format inny niż PNG/JPEG → `image_out_of_bounds` (bez konwersji formatu).
 2. `ImageOps.exif_transpose` — fizyczny obrót według orientacji EXIF (Jev ignoruje znacznik orientacji).
-**Fakt z nagrania (2026-11-13):** Jev odrzucił wycinek 274×287 px (78 638 px) odpowiedzią HTTP 400 „Invalid image dimensions”, a ten sam wycinek w 280×293 px przyjął. W praktyce minimum to **280 px na bok** (78 400 = 280²), mimo że dokumentacja podaje 256. Implementacja używa 280.
+**Fakt z nagrania (2026-11-13):** Jev odrzucił wycinek 274×287 px (78 638 px) odpowiedzią HTTP 400 „Invalid image dimensions”, a ten sam wycinek w 280×293 px przyjął. W praktyce minimum to **280 px na bok** (78 400 = 280²), mimo że dokumentacja podaje 256. Implementacja używa 280. Wersja `image_prep.v2` zostaje: wszystkie wpisy cache powstały już przy minimum 280 px (jedyne żądanie z 274×287 zakończyło się HTTP 400 i nie trafiło do cache), więc podbicie wersji unieważniłoby opłacone odpowiedzi bez zmiany wyniku.
 
-3. Skalowanie z zachowaniem proporcji, filtr `LANCZOS`: gdy krótszy bok < 280 px **albo** liczba pikseli < 78 400 — powiększenie współczynnikiem `max(256 / krótszy bok, √(78 400 / pikseli))` (zaokrąglenie w górę), aby spełnić oba minima naraz; gdy dłuższy bok > 1568 px — zmniejszenie do 1568 px. (Poprawka 2026-11-12: samo powiększenie krótszego boku do 256 px dawało dla kwadratowych wycinków 256×256 = 65 536 px < 78 400 i odrzucało 105 ze 119 wycinków kursu.)
-4. Kontrola po skalowaniu: każdy bok w 256–1568 px, liczba pikseli w 78 400–2 458 624. Niespełnienie (np. skrajne proporcje wycinka, przy których powiększenie krótszego boku wypycha dłuższy ponad 1568 px) → obraz odrzucony ze statusem `image_out_of_bounds`; żadne zapytanie nie jest wysyłane.
+3. Skalowanie z zachowaniem proporcji, filtr `LANCZOS`: gdy krótszy bok < 280 px **albo** liczba pikseli < 78 400 — powiększenie współczynnikiem `max(280 / krótszy bok, √(78 400 / pikseli))` (zaokrąglenie w górę), aby spełnić oba minima naraz; gdy dłuższy bok > 1568 px — zmniejszenie do 1568 px. (Poprawka 2026-11-12: samo powiększenie krótszego boku do wartości 256 px dawało dla kwadratowych wycinków 256×256 = 65 536 px < 78 400 i odrzucało 105 ze 119 wycinków kursu.)
+4. Kontrola po skalowaniu: każdy bok w 280–1568 px, liczba pikseli w 78 400–2 458 624. Niespełnienie (np. skrajne proporcje wycinka, przy których powiększenie krótszego boku wypycha dłuższy ponad 1568 px) → obraz odrzucony ze statusem `image_out_of_bounds`; żadne zapytanie nie jest wysyłane.
 5. Zapis JPEG, jakość 92, bez EXIF i innych metadanych (usuwa też ewentualne GPS). Wynik > 16 MiB → `image_out_of_bounds`.
 
 - `PreparedImage` zawiera **wyłącznie** bajty i typ MIME (`image/jpeg`) oraz `sha256` pliku źródłowego (do cache, nie wysyłany) i wymiary oryginału (do raportu, nie wysyłane). Nazwa pliku, `photo_id`, ścieżka i metadane nie są częścią obiektu, więc nie mogą trafić do żądania (F5.1).
@@ -136,6 +136,7 @@ Limity domyślne (przyjęte za wersją referencyjną prowadzącego, ADR-003 §5.
 - Po odpowiedzi 200: `cost_used_usd += usage.cost` (dla BYOK: `upstream_inference_cost`); gdy brak `usage.cost` — dodajemy pełną rezerwację i zapisujemy `cost_estimated = true`. Wywołanie zakończone błędem HTTP lub timeoutem liczy się jako zapytanie i rozlicza **pełną rezerwację** (`cost_estimated = true`), chyba że odpowiedź podaje `usage.cost`.
 - Oczekiwane zużycie MVP przy domyślnych limitach: 25 obrazów × 1 pytanie → ≤ 25 zapytań poziomu 1 + ≤ 25 poziomu 2 = ≤ 50 zapytań. Dla zestawu `photos` z trzema atrybutami (3 pytania na obraz) limit 100 zapytań może zadziałać przed limitem obrazów (`budget_exceeded`).
 - Trafienie w cache nie zmienia liczników (F5.8).
+- Nazewnictwo: model porównawczy w konfiguracji to `models.comparison`; rola w budżecie i progach to `compare` (`reserve_usd.compare`, `thresholds.compare.<model>.<atrybut>`; odczyt progów `compare` dodaje plan v1 T53). Moduł `compare/` (ADR-000) to porównanie OSM↔Overture — inna rzecz.
 
 ### 3.7 Cache
 
@@ -245,7 +246,7 @@ Sygnatury klientów przyjmują tylko `PreparedImage` i `Question` — nie ma par
 **Warunek rewizji:** Gdy OpenRouter udostępni koszt szacowany przed wysłaniem albo limit kosztu per żądanie dla Decisions.
 
 ### D-003-6. Nagranie prawdziwych odpowiedzi przed implementacją klientów
-**Status:** Accepted (wykonanie wymaga zgody użytkownika w momencie implementacji)
+**Status:** Accepted — wykonane 2026-11-13 (4 zapytania, ~0,00014 USD)
 **Data:** 2026-11-03
 **Kontekst:** AGENTS.md wymaga mocków z prawdziwych odpowiedzi; dokumentacja podaje dwa formaty obrazu w Decisions; cennik jest niepotwierdzony.
 **Decyzja:** Przed napisaniem `DecisionsClient`/`ChatClient` implementujący agent prosi użytkownika o zgodę i wykonuje skrypt nagrywający (`app/scripts/capture_openrouter.py`, poza pakietem runtime) z limitem **6 zapytań i 0,20 USD** (suma rezerwacji z §3.6: 4 × 0,02 + 2 × 0,04 = 0,16 USD; zmienione 2026-11-12 z 0,05 USD, które budżet by odrzucił): po 1–2 zapytania do `typesafe/jev-1.14` (poziom 1, oba formaty obrazu), `openai/gpt-6-luna-decisions`, `openai/gpt-6-luna` (reasoning `medium`) na jednym wycinku `signs/crops/` (licencja CC BY-SA, bez danych osobowych). Wynik w `app/tests/fixtures/captures/openrouter/*.json` z metadanymi i redakcją nagłówków. Skrypt odczytuje klucz ze zmiennej środowiskowej i nigdy go nie wypisuje.
@@ -259,8 +260,8 @@ Sygnatury klientów przyjmują tylko `PreparedImage` i `Question` — nie ma par
 ### D-003-7. Wspólny przygotowany obraz zgodny z limitami Jev
 **Status:** Accepted
 **Data:** 2026-11-12
-**Kontekst:** Poziom 1 to `typesafe/jev-1.14`, który przyjmuje tylko PNG/JPEG 256–1568 px na bok (78 400–2 458 624 px łącznie, ≤ 16 MiB) i nie obraca obrazu według EXIF. Wycinki znaków bywają mniejsze niż 256 px. Poprzednie przygotowanie (`image_prep.v1`) wysyłało wycinki bez zmian.
-**Decyzja:** Jedna transformacja dla wszystkich modeli i poziomów: `exif_transpose`, powiększenie Lanczos do 256 px krótszego boku, zmniejszenie do 1568 px dłuższego boku, JPEG q92 bez metadanych; obraz poza zakresem → `image_out_of_bounds` (§3.2). Wersja `image_prep.v2` w kluczu cache. Progi per poziom × model (§3.5). Przyjęte za wersją referencyjną prowadzącego (ADR-003 D-34).
+**Kontekst:** Poziom 1 to `typesafe/jev-1.14`, który przyjmuje tylko PNG/JPEG 280–1568 px na bok (dokumentacja Jev podaje 256; pomiar 2026-11-13; 78 400–2 458 624 px łącznie, ≤ 16 MiB) i nie obraca obrazu według EXIF. Wycinki znaków bywają mniejsze niż 256 px. Poprzednie przygotowanie (`image_prep.v1`) wysyłało wycinki bez zmian.
+**Decyzja:** Jedna transformacja dla wszystkich modeli i poziomów: `exif_transpose`, powiększenie Lanczos do 280 px krótszego boku, zmniejszenie do 1568 px dłuższego boku, JPEG q92 bez metadanych; obraz poza zakresem → `image_out_of_bounds` (§3.2). Wersja `image_prep.v2` w kluczu cache. Progi per poziom × model (§3.5). Przyjęte za wersją referencyjną prowadzącego (ADR-003 D-34).
 **Odrzucone alternatywy:**
 - Oryginalne bajty dla Luna i przeskalowane dla Jev: porównanie modeli mierzyłoby różne wejścia.
 - Odrzucanie małych wycinków zamiast powiększania: większość wycinków `signs/crops/` wypadłaby z ewaluacji.
@@ -405,7 +406,7 @@ Testy integracyjne klientów używają wyłącznie nagrań z D-003-6 (respx). Te
 | BUD-03 limit obrazów | Unit | `max_images=3`, 5 obrazów bez cache | zapytania tylko dla 3 pierwszych obrazów (stała kolejność), 2 obrazy `budget_exceeded` (`max_images`) | obraz w pełni z cache nie zużywa limitu |
 | CAC-01 ponowny run | Integration | dwa runy, ten sam cache | drugi run 0 żądań HTTP, `costs.jsonl` bez `miss`, koszt 0 (kryterium 8) | zmiana progu → 0 żądań, inny status |
 | CAC-02 klucz | Unit | zmiana modelu / effort / `prompt_version` / obrazu / wersji `image_prep` | inny klucz | ten sam obraz, inna nazwa pliku → ten sam klucz |
-| IMG-01 przygotowanie obrazu | Unit | wycinek 120×140 px; kadr 4000×3000 px; JPEG z orientacją EXIF 6 | krótszy bok 256 px; dłuższy bok 1568 px; poprawna orientacja; wynik JPEG q92 bez EXIF | wynik w granicach 256–1568 px na bok i 78 400–2 458 624 px |
+| IMG-01 przygotowanie obrazu | Unit | wycinek 120×140 px; kadr 4000×3000 px; JPEG z orientacją EXIF 6 | krótszy bok 280 px; dłuższy bok 1568 px; poprawna orientacja; wynik JPEG q92 bez EXIF | wynik w granicach 280–1568 px na bok i 78 400–2 458 624 px |
 | IMG-02 `image_out_of_bounds` | Unit | wycinek 40×400 px (po powiększeniu dłuższy bok > 1568); plik GIF | `final_status = image_out_of_bounds`, 0 żądań HTTP, brak wpisu w cache, pozycja kolejki przy drodze OSM | plik > 16 MiB po zapisie |
 | IMG-03 ten sam obraz dla modeli | Unit | pytanie eskalowane do poziomu 2 i tryb porównawczy | bajty obrazu w żądaniu poziomu 1, poziomu 2 i modelu porównawczego są identyczne | — |
 | THR-01 progi per model | Unit | próg `level1.jev.speed_limit = 0.9`, poziom 1 przełączony na `openai/gpt-6-luna-decisions` | użyty próg domyślny 0,8 z ostrzeżeniem „próg niekalibrowany”, nie 0,9 | `--threshold-l1` nadpisuje próg tylko dla bieżącego modelu |

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Szkic do akceptacji |
+| Status | Zaakceptowany; MVP wdrożone 2026-11-13 (plan MVP) |
 | Data | 2026-11-03 |
 | Zakres | Proof of concept, wersja v1 |
 | Powiązane | `docs/ADR/` (architektura i technologie — osobny dokument) |
@@ -46,7 +46,7 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
   |---|---|---|---|
   | `typesafe/jev-1.14` | poziom 1 (domyślny) | 0,042 / 0 | 262K |
   | `openai/gpt-6-luna-decisions` | alternatywa poziomu 1, model porównawczy | 0,10 / 0 | 1,1M |
-  | `openai/gpt-6-luna` | poziom 2 | do potwierdzenia nagraniem (`usage.cost`) | — |
+  | `openai/gpt-6-luna` | poziom 2 | ok. 0,000048 USD/zapytanie (nagranie 2026-11-13) | — |
 
 ### Poza zakresem v1 (później)
 
@@ -101,7 +101,7 @@ Analityk jakości danych mapowych ręcznie szuka miejsc, w których atrybuty dr�
 ### F4. Porównanie OSM ↔ Overture
 
 - F4.1 Dla każdej drogi powiązanej ze zdjęciem i każdego wybranego atrybutu system zestawia wartość OSM i Overture.
-- F4.2 Wartości są normalizowane do porównania (np. `50`, `50 mph` → km/h z dokładnością 0,01; `asphalt`, `concrete`, `paving_stones` → `paved`; wartości nieznane → `unknown_value`), ale **surowe** wartości (`maxspeed:*`, `when`, `between`) są zachowane i pokazane w raporcie. Prędkości są równe, gdy różnią się o mniej niż 0,5 km/h. Domyślne wartości `PL:*` (np. `PL:urban` → 50 km/h) są porównywane, ale zawsze oznaczone jako `implicit` w raporcie i powodzie kandydata (decyzja użytkownika 2026-11-12, ADR-002 D-002-4).
+- F4.2 Wartości są normalizowane do porównania (np. `50`, `50 mph` → km/h z dokładnością 0,01; `asphalt`, `concrete`, `paving_stones` → `paved`; wartości nieznane → `unknown_value`), ale **surowe** wartości (`maxspeed:*`, `when`, `between`) są zachowane i pokazane w raporcie. Prędkości są równe, gdy różnią się o mniej niż 0,5 km/h. Typ `PL:*` czytamy z `maxspeed:type`/`source:maxspeed` (np. `PL:urban` → 50 km/h); liczba w `maxspeed` wygrywa; wynik jest `implicit` w raporcie i powodzie kandydata, gdy wartość pochodzi z typu albo liczba równa się wartości domyślnej typu (decyzja użytkownika 2026-11-12, ADR-002 §3.5, D-002-4).
 - F4.3 Wynik porównania: `agree`, `disagree`, `osm_missing`, `overture_missing`, `both_missing`, `not_comparable` (np. reguła warunkowa lub wartość tylko dla części segmentu).
 - F4.4 Rozbieżność źródeł **nie jest** oznaczana jako błąd mapy. Raport pokazuje daty/wersje źródeł Overture, w tym czy wartość pochodzi z OSM.
 
@@ -126,7 +126,7 @@ poziom 3: człowiek ──► kolejka ręcznej weryfikacji (F6)
 - F5.4 **Poziom 1 → 2:** pytanie przechodzi do zwykłego LLM, gdy model decyzyjny zwróci prawdopodobieństwo poniżej progu (domyślnie **0,8**) albo `invalid_response`. Odpowiedź modelu decyzyjnego jest poprawna tylko, gdy `probabilities` zawiera wszystkie opcje, suma mieści się w [0,99; 1,01], a pewność to `max(probabilities)` (przyjęte za wersją referencyjną prowadzącego). **Błąd API** (kod HTTP ≠ 200, timeout 60 s, błąd połączenia) daje `model_unavailable` i **nie** powoduje eskalacji: zatrzymuje dalsze płatne wywołania w tym uruchomieniu (bezpiecznik), a bieżące i pozostałe pytania bez cache dostają `model_unavailable` i trafiają do kolejki ręcznej; raport nadal powstaje (przyjęte za wersją referencyjną prowadzącego). Odpowiedzi `nie widać` i `nieczytelny` z prawdopodobieństwem ≥ progu są **pewnymi odczytami**, nie powodem eskalacji.
 - F5.5 **Poziom 2 → 3:** gdy zwykły LLM również zwróci wynik poniżej swojego progu (domyślnie **0,8**), `invalid_response` lub `model_unavailable`, końcowy status to `abstain` (albo `model_unavailable` przy błędzie API na którymkolwiek poziomie). Przypadek trafia do **kolejki ręcznej weryfikacji** (F6.5).
 - F5.6 Progi są konfigurowalne osobno dla każdego poziomu, **modelu** i atrybutu (`thresholds.<poziom>.<model>.<atrybut>`). Prawdopodobieństwa różnych modeli nie są porównywalne, więc zamiana modelu poziomu 1 (`typesafe/jev-1.14` ↔ `openai/gpt-6-luna-decisions`) nie używa progu skalibrowanego dla drugiego modelu; brak progu dla wybranego modelu = domyślne 0,8 z ostrzeżeniem w raporcie (przyjęte za wersją referencyjną prowadzącego). Model poziomu 1 oraz model i `reasoning effort` poziomu 2 są konfigurowalne.
-- F5.6a Przed wysłaniem obraz jest przygotowany raz i ten sam trafia do wszystkich modeli i poziomów: obrót według EXIF, skala 256–1568 px na bok (limity Jev), JPEG bez metadanych. Obraz, którego nie da się zmieścić w limitach, dostaje status `image_out_of_bounds` i trafia do kolejki ręcznej bez zapytania do modelu (ADR-003 §3.2).
+- F5.6a Przed wysłaniem obraz jest przygotowany raz i ten sam trafia do wszystkich modeli i poziomów: obrót według EXIF, skala 280–1568 px na bok (pomiar 2026-11-13; dokumentacja Jev podaje 256), JPEG bez metadanych. Obraz, którego nie da się zmieścić w limitach, dostaje status `image_out_of_bounds` i trafia do kolejki ręcznej bez zapytania do modelu (ADR-003 §3.2).
 - F5.7 Każdy wynik zapisuje **ścieżkę kaskady**: odpowiedź i prawdopodobieństwo z każdego wywołanego poziomu, poziom rozstrzygający (`1`, `2` albo `human`) i powód eskalacji. Jedno nieudane zdjęcie nie przerywa uruchomienia.
 - F5.8 **Cache** po `sha256(obraz) + id pytania + model + reasoning effort + wersja promptu`, osobno dla każdego poziomu. Trafienie w cache nie liczy się do limitu zapytań ani kosztu.
 - F5.9 **Limity na uruchomienie** (przyjęte za wersją referencyjną prowadzącego): domyślnie 100 zapytań, 25 obrazów z nowymi zapytaniami i 1,00 USD **łącznie dla obu poziomów i modelu porównawczego**. Przed każdym zapytaniem rezerwujemy koszt (poziom 1: 0,02 USD, poziom 2: 0,04 USD, model porównawczy: 0,02 USD); zapytanie, które mogłoby przekroczyć limit, nie jest wysyłane. Zapytanie zakończone błędem liczy się do limitu z pełną rezerwacją. Po osiągnięciu limitu kolejne pytania dostają `budget_exceeded` i trafiają do kolejki ręcznej; raport nadal powstaje. Trafienia w cache nie zużywają żadnego limitu, więc większy zbiór obrazów można przetworzyć kolejnymi uruchomieniami.
@@ -184,6 +184,8 @@ Cel: analityk **albo agent AI korzystający z narzędzia** może wskazać, skąd
   schema = "workspace.map_qa"
   photos_dir = "course-materials/exercise-data/map-qa/data/photos"
   ```
+
+  W `app/mapqa.example.toml` źródło lokalne nazywa się `files` (wbudowane).
 
 - F8.3 **Typy źródeł v1:**
   - `files` — GeoParquet/CSV/GeoJSON z katalogu `path` (nazwy plików jak w `course-materials/exercise-data/map-qa/`);
@@ -315,7 +317,7 @@ Sekcje 3–8 opisują docelowe v1. Pierwszy etap (**MVP**) ma jak najszybciej ur
 | Porównanie odczytu z OSM `maxspeed` (surowe tagi kierunkowe i warunkowe zachowane), kandydaci i priorytety | F4.2 (część OSM), F6.1–F6.7 |
 | Raport **Markdown** + `manual_queue.csv` + `evaluation.json` | F7.1–F7.3 (bez HTML), F7.5, F7.6 |
 | Ewaluacja kaskady na etykietach `certain`, podział po `sequence`, porównanie z detektorem Mapillary | Sekcja 7 (prędkość) |
-| Testy z zamockowanym API; jedno prawdziwe uruchomienie na OpenRouter (`--model`, po potwierdzeniu manifestu) | Kryteria 6–9, 12–15, 19, 20 |
+| Testy z zamockowanym API; jedno prawdziwe uruchomienie na OpenRouter (`--model`, po potwierdzeniu manifestu) | Kryteria 5–9, 12–15, 19, 20 |
 
 ### Poza MVP — kolejność przyrostów
 
@@ -349,5 +351,5 @@ Sekcje 3–8 opisują docelowe v1. Pierwszy etap (**MVP**) ma jak najszybciej ur
 
 ## 11. Otwarte pytania
 
-- Jakie wartości progów (osobno per poziom, model i atrybut, F5.6) przyjąć po pierwszej kalibracji? Do tego czasu obowiązuje domyślne 0,8.
+- Jakie wartości progów (osobno per poziom, model i atrybut, F5.6) przyjąć po pierwszej kalibracji? Kalibracja 2026-11-13: próg poziomu 1 (Jev, speed_limit) = 0,80 utrzymany; kolejne kalibracje per atrybut w planie v1 (T47).
 - Kto i jak doda etykiety `unpaved`, aby objąć nawierzchnię progiem akceptacji?

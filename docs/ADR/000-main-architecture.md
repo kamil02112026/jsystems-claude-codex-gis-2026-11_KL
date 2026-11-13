@@ -29,7 +29,7 @@ Interfejsy (adapter źródła, kontrakt danych, klient modelu) projektujemy od M
 | Databricks `workspace.map_qa` | ✅ dostęp działa: Databricks CLI 1.26.0, token kursowy z zakresem `sql`, warehouse z `DATABRICKS.md`; liczności 5 tabel zgodne z plikami | ręczny odczyt użytkownika (`query_databricks.py`) |
 | Databricks: zapytania przestrzenne, limit `INLINE`, dekodowanie `hex(WKB)` | ⏳ niezweryfikowane | nagrania DB-01/DB-02 (ADR-001 §8) |
 | Narzędzia | ✅ uv 0.13.7, Python 3.12.16 (przez uv), DuckDB 1.5.6 + spatial | profil |
-| OpenRouter | ⏳ klucz ustawiony, żadne zapytanie nie zostało wysłane | nagranie D-003-6 przed implementacją klienta |
+| OpenRouter | ✅ nagrania G2 (2026-11-13), klienci T20, uruchomienia G3/G4; koszt łączny ~0,008 USD | nagrania G2, klienci T20, uruchomienia G3/G4 |
 
 Zmienne `DATABRICKS_*` istnieją tylko w sesji PowerShell użytkownika. Agent ma do nich dostęp wyłącznie wtedy, gdy uruchomiono go z tego okna, i sprawdza tylko ich obecność.
 
@@ -62,7 +62,7 @@ Wersje sprawdzone 2026-11-03 (`pip index versions`, PyPI); duckdb 1.5.6, pyarrow
 
 **Zasada przypinania:** wersje powyżej wpisujemy jako dokładne (`==`) w `app/pyproject.toml` i zatwierdzamy `uv.lock`. Pillow jest wyjątkiem od zasady „najnowsza wersja”: pozostaje 12.0.0 także przy aktualizacji zależności, dopóki dane kursu nie zostaną wygenerowane nowszą wersją. Jeśli `uv lock` nie znajdzie spójnego zestawu (np. duckdb 1.5.6 z pyarrow 23.0.1), implementujący agent obniża **jedną** bibliotekę (nigdy Pillow) do najnowszej zgodnej wersji, zapisuje przyczynę w sekcji „Odchylenia od ADR” w opisie PR i aktualizuje tę tabelę.
 
-**Ceny modeli (prowadzący, 12.11.2026):** `typesafe/jev-1.14` 0,042 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 262K; `openai/gpt-6-luna-decisions` 0,10 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 1,1M. Cena `openai/gpt-6-luna` i opóźnienia wszystkich modeli są niepotwierdzone. Koszt każdego zapytania odczytujemy z `usage.cost` odpowiedzi (ADR-003).
+**Ceny modeli (prowadzący, 12.11.2026):** `typesafe/jev-1.14` 0,042 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 262K; `openai/gpt-6-luna-decisions` 0,10 USD / mln tokenów wejścia, wyjście bez opłat, kontekst 1,1M. Cena `openai/gpt-6-luna` i opóźnienia wszystkich modeli są niepotwierdzone. Koszt każdego zapytania odczytujemy z `usage.cost` odpowiedzi, a dla kont BYOK z `usage.cost_details.upstream_inference_cost` (ADR-003 §3.6).
 
 ---
 
@@ -82,15 +82,15 @@ app/
   src/mapqa/
     cli/                    argparse: `main(argv) -> int`, polecenia run, sources, eval; render text/json; kody wyjścia
     config/                 ładowanie TOML + env + flag, precedencja, modele Pydantic
-    contract/               DataBundle (widoki DuckDB), schematy zbiorów, walidatory kontraktu
-    sql/                    zapytania DuckDB jako pliki .sql (profil, filtr bbox, dystanse w EPSG:2180)
+    contract/               DataBundle (widoki DuckDB), schematy zbiorów, walidatory kontraktu; `db.py`, `hashing.py`, `bundle.py`, `schema.py`
+    sql/                    [P1] — do utworzenia: zapytania DuckDB jako pliki .sql (profil, filtr bbox, dystanse w EPSG:2180)
     sources/                port SourceAdapter, files.py, databricks_rest.py [P1], databricks_cli.py [P1], registry
     profile/                profil wejścia (F2.3), odrzucone rekordy
-    matching/               łączenie zdjęcie → droga (F3) [P1]; w MVP adapter gotowych dopasowań
-    normalize/              normalizacja maxspeed, speed_limits, surface, lit (F4.2)
-    compare/                porównanie OSM ↔ Overture (F4.3) [P3]; w MVP tylko OSM
+    matching/               `provided.py` [MVP] (adapter gotowych dopasowań), `spatial.py` [P1] (łączenie zdjęcie → droga, F3)
+    normalize/              `osm.py`, normalizacja maxspeed, speed_limits, surface, lit (F4.2)
+    compare/                [P3] — do utworzenia: porównanie OSM ↔ Overture (F4.3); w MVP tylko OSM
     questions/              katalog pytań, dozwolone odpowiedzi, wersje promptów
-    models/                 klienci: decisions_client, chat_client; budowanie żądań; parsowanie
+    models/                 `image_prep.py`, `requests.py`, `openrouter.py` (klienci Decisions/Chat)
     cascade/                orkiestracja poziomów 1→2→human, progi, ścieżka kaskady
     cache/                  SQLite cache odpowiedzi
     budget/                 licznik zapytań i kosztu, log kosztów JSONL
@@ -187,7 +187,7 @@ Opis koncepcyjny; dokładne pola zbiorów źródłowych — ADR-001 §4.
 
 Wszystkie polecenia przyjmują `--config <ścieżka>` i `--output text|json` (domyślnie `text`). Przy `--output json` stdout zawiera **wyłącznie** jeden dokument JSON (koperta poniżej); komunikaty diagnostyczne idą na stderr.
 
-**Koperta JSON:** `ok` (bool), `command` (str), `exit_code` (int), `result` (obiekt, gdy `ok`), `error` (obiekt `code` — stały identyfikator np. `invalid_bbox`, `unknown_source`, `source_unavailable`, `auth_failed`, `budget_exceeded`, `confirmation_required`, `input_modified`; `message` — po polsku; `hint` — sugestia alternatywy, np. inne źródło), `warnings` (lista str).
+**Koperta JSON:** `ok` (bool), `command` (str), `exit_code` (int), `result` (obiekt, gdy `ok`), `error` (obiekt `code` — stały identyfikator np. `invalid_bbox`, `unknown_source`, `source_unavailable`, `auth_failed`, `budget_exceeded`, `confirmation_required`, `input_modified`, `attribute_not_available` (kod 1, plan v1 U4), `invalid_split`, `invalid_grid`, `invalid_limits`, `internal_error`; `message` — po polsku; `hint` — sugestia alternatywy, np. inne źródło), `warnings` (lista str).
 
 **Kody wyjścia (F8.9):** `0` sukces (także po odmowie `N` w potwierdzeniu — raport bez odczytu modelem); `1` błąd danych/walidacji (bbox, konfiguracja, nieznane źródło, naruszenie kontraktu, `confirmation_required`: włączony odczyt modelem bez TTY i bez `--yes`); `2` źródło niedostępne lub brak uprawnień (brak tokenu, 401/403, timeout połączenia, `FAILED` zapytania z błędem uprawnień); `3` run **zakończony** z raportem, ale odczyt modelem jest niepełny: co najmniej jedno pytanie dostało `budget_exceeded` albo bezpiecznik API się otworzył (`model_unavailable` z błędem API lub `circuit_open`; ADR-003 §3.5) (D10-I6); `4` pliki wejściowe zmieniły się w trakcie runu (`input_modified`; nowy kod 2026-11-12, D12).
 
@@ -195,7 +195,7 @@ Kolejność: `1` i `2` przerywają run przed zapisem raportu (`ok=false`, brak `
 
 | Polecenie | Wejście | Wyjście (`result`) | Błędy |
 |---|---|---|---|
-| `mapqa run` | `--bbox minx,miny,maxx,maxy` (domyślnie `19.80,49.95,20.15,50.15` dla `--dataset photos`; dla `--dataset signs` domyślnie brak filtra bbox — D10-I2), `--attributes speed_limit,surface,lit`, `--source <nazwa>`, `--dataset signs\|photos` (MVP: `signs`), `--model` (włącza płatny odczyt; domyślnie wyłączony — D11), `--no-model` (wymusza tryb bez modelu mimo `model_reading = true`), `--yes` (potwierdza manifest bez pytania), `--max-queries N` (100), `--max-images N` (25), `--max-usd X` (1.00), `--level1-model`, `--level2-model`, `--level2-effort`, `--threshold-l1`, `--threshold-l2` (nadpisują wszystkie atrybuty dla bieżącego modelu danego poziomu), `--split all\|calibration\|test` | `run_id`, `output_dir`, ścieżki plików, `model_reading`, `confirmation`, manifest kosztu, liczności lejka kaskady, liczba kandydatów per atrybut/priorytet, koszt per poziom, liczba `budget_exceeded` | 1: niepoprawny bbox (odwrócone granice, lon ∉ [-180,180], lat ∉ [-90,90]), nieznany atrybut, nieznane źródło (z listą dostępnych), `confirmation_required`; 2: źródło niedostępne; 3: budżet albo bezpiecznik API; 4: wejście zmienione w trakcie runu |
+| `mapqa run` | `--bbox minx,miny,maxx,maxy` (domyślnie `19.80,49.95,20.15,50.15` dla `--dataset photos`; dla `--dataset signs` domyślnie brak filtra bbox — D10-I2), `--attributes speed_limit,surface,lit`, `--source <nazwa>`, `--dataset signs\|photos` (MVP: `signs`), `--model` (włącza płatny odczyt; domyślnie wyłączony — D11), `--no-model` (wymusza tryb bez modelu mimo `model_reading = true`), `--yes` (potwierdza manifest bez pytania), `--max-queries N` (100), `--max-images N` (25), `--max-usd X` (1.00), `--level1-model`, `--level2-model`, `--level2-effort`, `--threshold-l1`, `--threshold-l2` (nadpisują wszystkie atrybuty dla bieżącego modelu danego poziomu), `--split all\|calibration\|test`, `--cache-only` (odczyt modelem wyłącznie z cache: 0 zapytań, bez klienta HTTP i bez potwierdzenia) | `run_id`, `output_dir`, ścieżki plików, `model_reading`, `confirmation`, manifest kosztu, liczności lejka kaskady, liczba kandydatów per atrybut/priorytet, koszt per poziom, liczba `budget_exceeded` | 1: niepoprawny bbox (odwrócone granice, lon ∉ [-180,180], lat ∉ [-90,90]), nieznany atrybut, nieznane źródło (z listą dostępnych), `confirmation_required`; 2: źródło niedostępne; 3: budżet albo bezpiecznik API; 4: wejście zmienione w trakcie runu |
 | `mapqa sources list` | — | lista `{name, type, access, is_default, resolved_by}` gdzie `resolved_by` ∈ `flag`, `env`, `config`, `builtin` | 1: niepoprawny plik konfiguracyjny |
 | `mapqa sources check` | `--source`, `--bbox` | `{name, reachable, tables: {nazwa: {total, in_bbox}}, warnings}` | 1: nieznane źródło; 2: brak dostępu |
 | `mapqa eval run` | jak `run`, domyślnie `--split test`; odczyt modelem zawsze włączony, więc zawsze obowiązuje potwierdzenie manifestu (`y/N` albo `--yes`) | `EvaluationReport` + ścieżka `evaluation.json` | jak `run` |
@@ -203,7 +203,7 @@ Kolejność: `1` i `2` przerywają run przed zapisem raportu (`ok=false`, brak `
 
 Polecenia `eval` korzystają z tej samej kaskady, cache, budżetu i potwierdzenia co `run` (ADR-004).
 
-**Potwierdzenie płatnych wywołań (D11):** przy `--model` (albo w `eval`) i co najmniej jednym pytaniu bez trafienia w cache CLI wypisuje manifest (liczba obrazów i pytań, modele per poziom, `max_queries`, `max_usd`) — przy `--output text` na stdout, przy `--output json` na stderr — i czeka na `y/N`. `--yes` pomija pytanie. Stdin bez TTY i brak `--yes` → kod 1, `error.code = confirmation_required`, `hint` = „dodaj `--yes` albo uruchom bez `--model`”, brak raportu, 0 zapytań. Odpowiedź `N` → raport bez odczytu modelem (`skipped_no_model`), `warnings` zawiera `model_reading_declined`, kod 0.
+**Potwierdzenie płatnych wywołań (D11):** przy `--model` (albo w `eval`) i co najmniej jednym pytaniu bez trafienia w cache CLI wypisuje manifest (liczba obrazów i pytań, modele per poziom, `max_queries`, `max_usd`) — przy `--output text` na stdout, przy `--output json` na stderr — i czeka na `y/N`. `--yes` pomija pytanie. Stdin bez TTY i brak `--yes` → kod 1, `error.code = confirmation_required`, `hint` = „dodaj `--yes` albo uruchom bez `--model`”, brak raportu, 0 zapytań. Odpowiedź `N` → raport bez odczytu modelem (`skipped_no_model`), `warnings` zawiera `model_reading_declined`, kod 0. Manifest podaje `planned_new_images`, `max_requests`, `max_cost_usd` i jest wypisywany na stderr także przy `--yes`.
 
 ---
 
@@ -351,7 +351,7 @@ Wartości sekretów są odczytywane wyłącznie w momencie budowy klienta HTTP i
 **Warunek rewizji:** Gdy na zbiorze kalibracyjnym `openai/gpt-6-luna-decisions` osiągnie trafność wyższą o ≥ 5 p.p. przy akceptowalnym koszcie albo Jev wyraźnie częściej eskaluje do poziomu 2. Wtedy domyślny model poziomu 1 się zmienia (nowy wpis ADR).
 
 ### D10. Techniczne interpretacje niejednoznaczności PRD (do zatwierdzenia w PRD)
-**Status:** Proposed — obowiązuje implementację, dopóki PRD nie zostanie zaktualizowany inaczej
+**Status:** Accepted (2026-11-13; interpretacje I1–I7 obowiązują)
 **Data:** 2026-11-03
 **Kontekst:** Code review PRD (PR #1 w forku, `/code-review medium`) wykazał sprzeczności i luki, które blokują jednoznaczne testy. Rozstrzygnięcia są techniczne; decyzja produktowa należy do właściciela PRD.
 **Decyzja:**
@@ -483,7 +483,7 @@ sequenceDiagram
   participant P as pipeline
   participant CAS as cascade
   participant REP as report
-  U->>CLI: mapqa run --bbox ... --source local --model
+  U->>CLI: mapqa run --bbox ... --source files --model
   CLI->>CFG: rozwiąż źródło, limity, progi
   CFG-->>CLI: RunParams (walidacja bbox OK)
   CLI->>P: run(params)
@@ -519,7 +519,7 @@ sequenceDiagram
   U->>CLI: mapqa run --source course-databricks
   CLI->>SRC: load(bbox)
   SRC-->>CLI: SourceUnavailable (brak DATABRICKS_TOKEN)
-  CLI-->>U: błąd source_unavailable + hint "--source local", kod 2
+  CLI-->>U: błąd source_unavailable + hint "--source files", kod 2
 ```
 
 #### `mapqa run` — przekroczony budżet
@@ -586,7 +586,7 @@ Szczegółowe tabele scenariuszy są w ADR 001–004. Scenariusze przekrojowe:
 - TAC-09: Narzędzie uruchamia się w PowerShell na Windows bez WSL/Docker/conda (`uv run --project app mapqa --help` kod 0).
 - TAC-10: Wszystkie progi, limity i modele z PRD mają domyślne wartości w `mapqa.example.toml` i są nadpisywalne flagą CLI (test parametryzowany).
 - TAC-11: Raport, CSV i komunikaty dla człowieka są po polsku; identyfikatory i nazwy pól w oryginale (test snapshot sekcji raportu).
-- TAC-13: Run bez `--model` nie tworzy klienta OpenRouter (0 żądań, brak wymaganego `OPENROUTER_API_KEY`); run z `--model` bez TTY i bez `--yes` kończy się kodem 1 przed pierwszym żądaniem (test z respx zliczającym trasy).
-- TAC-15: Żadne zapytanie `.sql` ani SQL w kodzie nie wywołuje `ST_Distance`/`ST_DWithin` na kolumnie bez przyrostka `_2180`, a każde `ST_Transform` z EPSG:4326 ma `always_xy := true` (test statyczny); GeoPandas, Shapely, pyproj i pandas nie są importowane w `app/src/` (tylko w `app/tests/`).
 - TAC-12: Test architektury: moduły rdzenia (`matching`, `normalize`, `compare`, `cascade`, `candidates`, `evaluation`) nie importują `httpx`, `sources.databricks_*` ani `cli`. Żaden moduł poza `evaluation` nie importuje `evaluation.labels` ani nie zawiera ciągów `reference_labels.csv` / `labels.csv` (ADR-004 TAC-004-07).
+- TAC-13: Run bez `--model` nie tworzy klienta OpenRouter (0 żądań, brak wymaganego `OPENROUTER_API_KEY`); run z `--model` bez TTY i bez `--yes` kończy się kodem 1 przed pierwszym żądaniem (test z respx zliczającym trasy).
 - TAC-14: `run.json` zawiera `sha256` każdego przeczytanego pliku wejściowego przed i po runie; zmiana pliku w trakcie runu daje kod 4.
+- TAC-15: Żadne zapytanie `.sql` ani SQL w kodzie nie wywołuje `ST_Distance`/`ST_DWithin` na kolumnie bez przyrostka `_2180`, a każde `ST_Transform` z EPSG:4326 ma `always_xy := true` (test statyczny); GeoPandas, Shapely, pyproj i pandas nie są importowane w `app/src/` (tylko w `app/tests/`).
