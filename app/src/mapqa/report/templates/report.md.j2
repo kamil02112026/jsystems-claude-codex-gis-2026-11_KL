@@ -69,6 +69,17 @@ Kompletność atrybutów:
 
 {% endfor %}
 
+{% if vm.link_agreement %}
+Zgodność własnego dopasowania z `photo_road_links.csv` (`osm_way_id`): {{ pct(vm.link_agreement[0], vm.link_agreement[1]) }} — punkt odniesienia, nie wzorzec.
+
+{% endif %}
+{% if vm.link_flags %}
+Flagi połączeń zdjęcie → droga:
+{% for flag, n in vm.link_flags.items() %}
+- `{{ flag }}`: {{ n }}
+{% endfor %}
+
+{% endif %}
 Odrzucone rekordy według przyczyny:
 {% for reason, n in rejected_by_reason %}
 - `{{ reason }}`: {{ n }}

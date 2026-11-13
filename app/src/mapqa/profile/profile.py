@@ -90,7 +90,7 @@ def _clean(value: str | None) -> str | None:
     return value or None
 
 
-def _road_link(photo_id: str, way_id: int, tags: Mapping[str, str | None]) -> SignLink:
+def road_link(photo_id: str, way_id: int, tags: Mapping[str, str | None]) -> SignLink:
     """Adapt the tags of a linked road to the shape `osm_speed_value` reads (one speed logic for all sets)."""
     return SignLink(
         photo_id=photo_id,
@@ -142,7 +142,7 @@ def build_photos_profile(
         if way_id is None:
             continue
         tags = road_tags.get(way_id, {})
-        value = osm_speed_value(_road_link(photo.photo_id, way_id, tags))
+        value = osm_speed_value(road_link(photo.photo_id, way_id, tags))
         if value.status == "ok":
             speed_ok += 1
             if _clean(tags.get("maxspeed")) or _clean(tags.get("maxspeed:forward")) or _clean(tags.get("maxspeed:backward")):

@@ -1,4 +1,4 @@
-"""`mapqa run` / `mapqa eval`: F2 → F7 for the signs dataset (ADR-000 §6, D11, D12; ADR-003 §3.5; ADR-004 §3.5)."""
+"""`mapqa run` / `mapqa eval`: F2 → F7 for the signs and photos datasets (ADR-000 §6, D11, D12; ADR-003 §3.5; ADR-004 §3.5)."""
 
 from __future__ import annotations
 
@@ -23,15 +23,13 @@ from mapqa.candidates.rules import CandidateInput, build_candidates
 from mapqa.cascade.cascade import Cascade
 from mapqa.cascade.ports import ModelPort, PortResult
 from mapqa.config import LoadedConfig, load
-from mapqa.contract.bundle import Bbox, SignLink, SignsBundle
+from mapqa.contract.bundle import Bbox, SignsBundle
 from mapqa.contract.errors import ConfirmationRequired, InputModified, ValidationError
+from mapqa.datasets import DatasetView, photos_bbox, photos_view, signs_view
 from mapqa.contract.hashing import sha256_file
 from mapqa.contract.models import AttributeValue, CascadeResult, Confirmation, RunLimits
 from mapqa.evaluation import calibrate, calibration_pairs, evaluation_input_files, photo_split, run_evaluation
-from mapqa.matching.provided import map_provided_links
 from mapqa.models.image_prep import ImageOutOfBounds, PreparedImage, prepare_image
-from mapqa.normalize.osm import osm_speed_value
-from mapqa.profile.profile import build_profile
 from mapqa.questions.catalog import SPEED_LIMIT_VALUE
 from mapqa.report.thumbs import make_thumbnail
 from mapqa.report.viewmodel import (
@@ -117,9 +115,6 @@ def _apply_overrides(loaded: LoadedConfig, args: argparse.Namespace) -> None:
 def _run_id(params: dict[str, Any], now: datetime) -> str:
     digest = hashlib.sha256(json.dumps(params, sort_keys=True, default=str).encode()).hexdigest()[:6]
     return now.strftime("%Y%m%dT%H%M%SZ") + "-" + digest
-
-
-_osm_value = osm_speed_value  # shared with the profile (review finding: two diverging copies)
 
 
 def _parse_grid(text: str) -> list[float]:
@@ -296,6 +291,15 @@ def _funnel(results: dict[str, CascadeResult]) -> FunnelRow:
     )
 
 
+def _completeness(profile: Any) -> list[Completeness]:
+    rows = [Completeness("maxspeed", profile.maxspeed.numerator, profile.maxspeed.denominator, profile.maxspeed.implicit_without_number)]
+    for name in ("surface", "lit"):
+        value = getattr(profile, name)
+        if value is not None:
+            rows.append(Completeness(name, value.numerator, value.denominator))
+    return rows
+
+
 def _write_outputs(out_dir: Path, vm: ReportViewModel, queue: list[QueueItem], run_json: dict, evaluation_json: dict | None) -> dict[str, str]:
     return write_run(out_dir, vm, queue, run_json, evaluation_json)
 
@@ -307,13 +311,33 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
     c = loaded.config
     model_reading = eval_mode is not None or ((args.model or args.cache_only or c.model_reading) and not args.no_model)
 
+    if args.dataset == "photos" and model_reading:
+        raise ValidationError(
+            "Odczyt modelem zestawu photos nie jest jeszcze dostępny (pytania o oświetlenie: plan v1 T46–T47)",
+            code="model_not_available_for_dataset",
+            hint="Uruchom --dataset photos z --no-model albo użyj --dataset signs",
+        )
+    if args.dataset == "photos" and loaded.source.type != "files":
+        raise ValidationError(
+            "Własne dopasowanie zestawu photos wymaga źródła files (Databricks: plan v1 T38–T41)",
+            code="dataset_not_available",
+            hint="Użyj --source files",
+        )
     adapter = build_adapter(loaded.source_name, loaded.source, Path.cwd())
     descriptor = adapter.describe()
     started = datetime.now(UTC)
-    bundle = adapter.load_signs(bbox)
     labels_root = Path(c.labels_path)
     labels_root = labels_root if labels_root.is_absolute() else Path.cwd() / labels_root
-    input_paths = [Path(p) for p in bundle.files_read] + evaluation_input_files(labels_root)
+    data_root = Path(loaded.source.path)  # type: ignore[union-attr]
+    data_root = data_root if data_root.is_absolute() else Path.cwd() / data_root
+    bundle: SignsBundle | None = None
+    if args.dataset == "photos":
+        area = photos_bbox(bbox)
+        view: DatasetView = photos_view(adapter.load_photos(area), data_root, bbox, adapter.check(area))
+    else:
+        bundle = adapter.load_signs(bbox)
+        view = signs_view(bundle, bbox)
+    input_paths = [Path(p) for p in view.files_read] + evaluation_input_files(labels_root, args.dataset)
     hashes_before = _hash_all(input_paths)
 
     params = {
@@ -335,21 +359,18 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
     reports_dir = Path(c.reports_dir)
     out_dir, run_id = _unique_out_dir(reports_dir if reports_dir.is_absolute() else Path.cwd() / reports_dir, _run_id(params, started))
 
-    split = photo_split(labels_root) if args.split != "all" else {}
-    photo_ids = sorted(s.photo_id for s in bundle.signs if args.split == "all" or split.get(s.photo_id) == args.split)
-    links = map_provided_links(bundle)
-    link_rows = {lk.photo_id: lk for lk in bundle.links}
-    osm_values = {pid: _osm_value(link_rows.get(pid)) for pid in photo_ids}
-    signs = {s.photo_id: s for s in bundle.signs}
+    split = photo_split(labels_root, args.dataset) if args.split != "all" else {}
+    photo_ids = [pid for pid in view.photo_ids if args.split == "all" or split.get(pid) == args.split]
+    links, osm_values, meta = view.links, view.osm_values, view.meta
 
-    warnings: list[str] = []
+    warnings: list[str] = list(view.warnings)
     phase: _ModelPhase | None = None
-    if model_reading:
+    if model_reading and bundle is not None:
         phase = _model_phase(loaded, args, bundle, photo_ids, run_id, out_dir)
         results = phase.results
         warnings += phase.warnings
     else:
-        results = {pid: CascadeResult(photo_sha256=signs[pid].crop_sha256, question_id=QUESTION.question_id, final_status="skipped_no_model") for pid in photo_ids}
+        results = {pid: CascadeResult(photo_sha256=meta[pid].sha256, question_id=QUESTION.question_id, final_status="skipped_no_model") for pid in photo_ids}
     model_used = phase is not None and phase.confirmation != "declined"
 
     inputs = [
@@ -358,11 +379,11 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
             link=links[pid],
             osm=osm_values[pid],
             cascade=results[pid],
-            photo_path=signs[pid].crop_path,
-            photo_captured_at=signs[pid].captured_at,
-            photo_author=signs[pid].author,
-            photo_license=signs[pid].license,
-            photo_source_url=signs[pid].source_url,
+            photo_path=meta[pid].path,
+            photo_captured_at=meta[pid].captured_at,
+            photo_author=meta[pid].author,
+            photo_license=meta[pid].license,
+            photo_source_url=meta[pid].source_url,
         )
         for pid in photo_ids
     ]
@@ -370,7 +391,8 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
     queue = build_queue(candidates, inputs)
 
     evaluation = run_evaluation(
-        labels_root, results, split_name=None if args.split == "all" else args.split, with_model=model_used, photo_ids=set(photo_ids)
+        labels_root, results, split_name=None if args.split == "all" else args.split, with_model=model_used, photo_ids=set(photo_ids),
+        dataset=args.dataset,
     )
     calibration: dict[str, Any] | None = None
     if eval_mode == "calibrate" and model_used:
@@ -378,12 +400,10 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
         calibration = cal.model_dump(mode="json") if hasattr(cal, "model_dump") else cal.__dict__
 
     # ---- report ---------------------------------------------------------------------------
-    profile = build_profile(bundle, bbox_text=bbox.as_text() if bbox else None)
-    data_root = Path(loaded.source.path)  # type: ignore[union-attr]
-    data_root = data_root if data_root.is_absolute() else Path.cwd() / data_root
+    profile = view.profile
     out_dir.mkdir(parents=True, exist_ok=True)
     queue_photos = sorted({item.photo_id for item in queue})
-    thumbs = {pid: make_thumbnail(data_root / signs[pid].crop_path, out_dir, signs[pid].crop_sha256) for pid in queue_photos}
+    thumbs = {pid: make_thumbnail(data_root / meta[pid].path, out_dir, meta[pid].sha256) for pid in queue_photos if meta[pid].image_ok}
     budget = phase.budget if phase else None
     cost = CostSummary(
         total_usd=budget.cost_used_usd if budget else Decimal(0),
@@ -397,7 +417,7 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
     vm = ReportViewModel(
         run_id=run_id,
         tool_version=__version__,
-        bbox_text=bbox.as_text() if bbox else "brak filtra",
+        bbox_text=bbox.as_text() if bbox else (photos_bbox(None).as_text() + " (domyślny bbox danych)" if args.dataset == "photos" else "brak filtra"),
         attributes=attributes,
         dataset=args.dataset,
         source=descriptor,
@@ -411,9 +431,11 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
         },
         uncalibrated_warnings=phase.uncalibrated if phase else [],
         limits=c.limits,
-        dataset_counts=[DatasetCount("signs", v["total"], v["in_bbox"]) for v in profile.counts.values()],
-        completeness=[Completeness("maxspeed", profile.maxspeed.numerator, profile.maxspeed.denominator, profile.maxspeed.implicit_without_number)],
-        rejected=bundle.rejected,
+        dataset_counts=[DatasetCount(name, v["total"], v["in_bbox"]) for name, v in profile.counts.items()],
+        completeness=_completeness(profile),
+        rejected=view.rejected,
+        link_agreement=(profile.agreement.numerator, profile.agreement.denominator) if profile.agreement else None,
+        link_flags=dict(sorted(Counter(f for pid in photo_ids for f in links[pid].flags).items())),
         profile_warnings=profile.warnings,
         funnel=[funnel],
         candidates_by_priority={ATTRIBUTE: dict(sorted(Counter(cd.priority for cd in candidates).items()))},
@@ -423,7 +445,7 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
         evaluation=evaluation.report,
         baseline_mapillary=evaluation.baseline_mapillary,
         cost=cost,
-        attributions=[Attribution(pid, signs[pid].author, signs[pid].license, signs[pid].source_url) for pid in queue_photos],
+        attributions=[Attribution(pid, meta[pid].author, meta[pid].license, meta[pid].source_url) for pid in queue_photos],
     )
     run_json: dict[str, Any] = {
         "run_id": run_id,
@@ -436,6 +458,7 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
         "candidates": len(candidates),
         "queue_items": len(queue),
         "warnings": warnings,
+        "link_agreement": {"numerator": profile.agreement.numerator, "denominator": profile.agreement.denominator} if profile.agreement else None,
         "calibration": calibration,
     }
     evaluation_json = evaluation.report.model_dump(mode="json") if evaluation.report else None

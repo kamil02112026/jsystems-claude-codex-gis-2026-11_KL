@@ -37,18 +37,26 @@ class SpatialMatcher:
             )
             SELECT node_id, first(geom_2180 ORDER BY osm_id) AS geom_2180
             FROM nodes GROUP BY node_id HAVING count(DISTINCT osm_id) >= 3''')
+        # bounding boxes in EPSG:2180: cheap numeric pre-filter ahead of the exact 25 m test — no spatial index, run ≤ 2 min, PRD §6
+        for table in (self.roads, self.segments):
+            con.execute(f'''CREATE OR REPLACE TEMP TABLE {table} AS SELECT *,
+                ST_XMin(geom_2180) AS bx0, ST_YMin(geom_2180) AS by0,
+                ST_XMax(geom_2180) AS bx1, ST_YMax(geom_2180) AS by1 FROM {table}''')
+        con.execute(f'''CREATE OR REPLACE TEMP TABLE {self.junctions} AS
+            SELECT *, ST_X(geom_2180) AS jx, ST_Y(geom_2180) AS jy FROM {self.junctions}''')
 
     def _candidates(self, photo: PhotoRecord) -> list[dict]:
         query = f'''
-            WITH photo AS (SELECT {to_2180_sql('point_4326')} AS geom_2180
-                FROM (SELECT ST_Point(?, ?) AS point_4326)),
+            WITH photo AS (SELECT geom_2180, ST_X(geom_2180) AS px, ST_Y(geom_2180) AS py
+                FROM (SELECT {to_2180_sql('point_4326')} AS geom_2180 FROM (SELECT ST_Point(?, ?) AS point_4326))),
             nearby AS (
                 SELECT r.*, p.geom_2180 AS photo_2180,
                     {distance_sql('r.geom_2180', 'p.geom_2180')} AS distance_2180,
                     ST_Length(r.geom_2180) AS length_2180,
                     ST_LineLocatePoint(r.geom_2180, p.geom_2180) AS fraction
                 FROM {self.roads} r CROSS JOIN photo p
-                WHERE ST_DWithin(r.geom_2180, p.geom_2180, 25)
+                WHERE r.bx0 <= p.px + 25 AND r.bx1 >= p.px - 25 AND r.by0 <= p.py + 25 AND r.by1 >= p.py - 25
+                    AND ST_DWithin(r.geom_2180, p.geom_2180, 25)
                     AND ST_Length(r.geom_2180) > 0
             ), tangent AS (
                 SELECT *, ST_LineInterpolatePoint(geom_2180, fraction) AS projection_2180,
@@ -67,7 +75,9 @@ class SpatialMatcher:
                 ST_X(ST_EndPoint(tangent_4326)) AS lon2,
                 ST_Y(ST_EndPoint(tangent_4326)) AS lat2,
                 EXISTS (SELECT 1 FROM {self.junctions} j
-                    WHERE ST_DWithin(j.geom_2180, geographic.projection_2180, 15)) AS junction_nearby
+                    WHERE j.jx BETWEEN ST_X(geographic.projection_2180) - 15 AND ST_X(geographic.projection_2180) + 15
+                        AND j.jy BETWEEN ST_Y(geographic.projection_2180) - 15 AND ST_Y(geographic.projection_2180) + 15
+                        AND ST_DWithin(j.geom_2180, geographic.projection_2180, 15)) AS junction_nearby
             FROM geographic
         '''
         result = self.con.execute(query, [photo.longitude, photo.latitude])
@@ -83,12 +93,13 @@ class SpatialMatcher:
 
     def _overture(self, photo: PhotoRecord, osm_id: int | None) -> tuple[str | None, bool, bool]:
         result = self.con.execute(f'''
-            WITH photo AS (SELECT {to_2180_sql('point_4326')} AS geom_2180
-                FROM (SELECT ST_Point(?, ?) AS point_4326))
+            WITH photo AS (SELECT geom_2180, ST_X(geom_2180) AS px, ST_Y(geom_2180) AS py
+                FROM (SELECT {to_2180_sql('point_4326')} AS geom_2180 FROM (SELECT ST_Point(?, ?) AS point_4326)))
             SELECT s.id, s.sources, s.level_rules,
                 {distance_sql('s.geom_2180', 'p.geom_2180')} AS distance_2180
             FROM {self.segments} s CROSS JOIN photo p
-            WHERE ST_DWithin(s.geom_2180, p.geom_2180, 25)
+            WHERE s.bx0 <= p.px + 25 AND s.bx1 >= p.px - 25 AND s.by0 <= p.py + 25 AND s.by1 >= p.py - 25
+                AND ST_DWithin(s.geom_2180, p.geom_2180, 25)
             ''', [photo.longitude, photo.latitude]).fetchall()
         ranked = []
         for sid, sources, levels, distance in result:

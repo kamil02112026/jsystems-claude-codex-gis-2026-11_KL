@@ -38,7 +38,7 @@ def _common(p: argparse.ArgumentParser) -> None:
 
 
 def _run_options(p: argparse.ArgumentParser, *, default_split: str) -> None:
-    p.add_argument("--bbox", help="minx,miny,maxx,maxy w WGS84 (dla --dataset signs domyślnie bez filtra)")
+    p.add_argument("--bbox", help="minx,miny,maxx,maxy w WGS84 (signs: domyślnie bez filtra; photos: domyślnie bbox danych)")
     p.add_argument("--attributes", default="speed_limit", help="lista atrybutów (MVP: speed_limit)")
     p.add_argument("--dataset", choices=("signs", "photos"), default="signs")
     p.add_argument("--model", action="store_true", help="włącza płatny odczyt modelem (wymaga potwierdzenia)")
@@ -176,8 +176,12 @@ def validate_run_args(args: argparse.Namespace) -> tuple[Bbox | None, list[str]]
     not_mvp = [a for a in attributes if a not in MVP_ATTRIBUTES]
     if not_mvp:
         raise ValidationError(f"Atrybut niedostępny w MVP: {', '.join(not_mvp)}", code="invalid_attribute", hint="MVP obsługuje speed_limit (PRD §9)")
-    if args.dataset != "signs":
-        raise ValidationError("Zestaw photos będzie dostępny od przyrostu P1", code="dataset_not_available", hint="Użyj --dataset signs")
+    if args.dataset == "photos" and (args.model or args.cache_only):  # plan v1 T37: photos without the model until T46–T47
+        raise ValidationError(
+            "Odczyt modelem zestawu photos nie jest jeszcze dostępny (pytania o oświetlenie: plan v1 T46–T47)",
+            code="model_not_available_for_dataset",
+            hint="Uruchom --dataset photos bez --model",
+        )
     if (args.model or args.cache_only) and args.no_model:
         raise ValidationError("Flagi --model/--cache-only i --no-model wykluczają się", code="invalid_flags")
     for name in ("max_queries", "max_images"):

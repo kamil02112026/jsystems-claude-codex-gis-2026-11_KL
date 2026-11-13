@@ -89,9 +89,9 @@ def test_surface_is_blocked_until_unpaved_labels_exist(capsys) -> None:  # plan 
     assert "unpaved" in err["message"] and "P5" in err["message"]
 
 
-def test_mvp_rejects_photos_dataset(capsys) -> None:
-    assert main(["run", "--dataset", "photos", "--output", "json"]) == 1
-    assert _json(capsys)["error"]["code"] == "dataset_not_available"
+def test_photos_dataset_rejects_model_reading_until_t46(capsys) -> None:  # plan v1 T37
+    assert main(["run", "--dataset", "photos", "--model", "--output", "json"]) == 1
+    assert _json(capsys)["error"]["code"] == "model_not_available_for_dataset"
 
 
 @pytest.mark.parametrize("fmt", [["--output", "json"], ["--output=json"]])

@@ -103,6 +103,8 @@ class ReportViewModel:
     completeness: list[Completeness] = field(default_factory=list)
     rejected: list[RejectedRecord] = field(default_factory=list)
     profile_warnings: list[str] = field(default_factory=list)
+    link_agreement: tuple[int, int] | None = None  # own osm_way_id == photo_road_links.csv (F3.5, MAT-07)
+    link_flags: dict[str, int] = field(default_factory=dict)  # photo→road flags, marked not hidden (F3.3)
     sample_bias_note: str = SAMPLE_BIAS_NOTE
     # 3. cascade funnel
     funnel: list[FunnelRow] = field(default_factory=list)
