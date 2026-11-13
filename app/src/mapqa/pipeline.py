@@ -24,12 +24,13 @@ from mapqa.cascade.cascade import Cascade
 from mapqa.cascade.ports import ModelPort, PortResult
 from mapqa.config import LoadedConfig, load
 from mapqa.contract.bundle import Bbox, SignLink, SignsBundle
-from mapqa.contract.errors import ConfirmationRequired, InputModified
+from mapqa.contract.errors import ConfirmationRequired, InputModified, ValidationError
+from mapqa.contract.hashing import sha256_file
 from mapqa.contract.models import AttributeValue, CascadeResult, Confirmation, RunLimits
 from mapqa.evaluation import calibrate, calibration_pairs, evaluation_input_files, photo_split, run_evaluation
 from mapqa.matching.provided import map_provided_links
 from mapqa.models.image_prep import ImageOutOfBounds, PreparedImage, prepare_image
-from mapqa.normalize.maxspeed import normalize_directional, normalize_maxspeed
+from mapqa.normalize.osm import osm_speed_value
 from mapqa.profile.profile import build_profile
 from mapqa.questions.catalog import SPEED_LIMIT_VALUE
 from mapqa.report.thumbs import make_thumbnail
@@ -76,13 +77,7 @@ def _stdin_is_tty() -> bool:
 
 
 def _sha256(path: Path) -> str | None:
-    if not path.is_file():
-        return None
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return sha256_file(path) if path.is_file() else None
 
 
 def _hash_all(paths: list[Path]) -> dict[str, str | None]:
@@ -124,18 +119,31 @@ def _run_id(params: dict[str, Any], now: datetime) -> str:
     return now.strftime("%Y%m%dT%H%M%SZ") + "-" + digest
 
 
-def _osm_value(link: SignLink | None) -> AttributeValue:
-    if link is None:
-        return AttributeValue(status="missing", note="brak połączenia z drogą OSM")
-    if link.maxspeed is None and (link.maxspeed_forward or link.maxspeed_backward):
-        directional = normalize_directional(
-            link.maxspeed_forward, link.maxspeed_backward, maxspeed_type=link.maxspeed_type, source_maxspeed=link.source_maxspeed
-        )
-        if directional is not None:
-            return directional
-    return normalize_maxspeed(
-        link.maxspeed, maxspeed_type=link.maxspeed_type, source_maxspeed=link.source_maxspeed, conditional=link.maxspeed_conditional
-    )
+_osm_value = osm_speed_value  # shared with the profile (review finding: two diverging copies)
+
+
+def _parse_grid(text: str) -> list[float]:
+    """'0.50:0.99:0.01' → [0.50, 0.51, ..., 0.99] (ADR-000 §6 eval calibrate --grid)."""
+    try:
+        start, stop, step = (Decimal(x) for x in text.split(":"))
+    except (ValueError, ArithmeticError):
+        raise ValidationError("--grid musi mieć postać start:stop:krok, np. 0.50:0.99:0.01", code="invalid_grid") from None
+    if step <= 0 or start > stop or start < 0 or stop > 1:
+        raise ValidationError("--grid: 0 ≤ start ≤ stop ≤ 1 i krok > 0", code="invalid_grid")
+    values, v = [], start
+    while v <= stop:
+        values.append(float(v))
+        v += step
+    return values
+
+
+def _unique_out_dir(base: Path, run_id: str) -> tuple[Path, str]:
+    """Never share a run directory between two runs started in the same second (review finding)."""
+    candidate, n = run_id, 1
+    while (base / candidate).exists():
+        n += 1
+        candidate = f"{run_id}-{n}"
+    return base / candidate, candidate
 
 
 @dataclass
@@ -202,6 +210,7 @@ def _model_phase(
     cache_path = Path(c.cache_dir)
     cache_path = (cache_path if cache_path.is_absolute() else Path.cwd() / cache_path) / "llm_cache.sqlite"
     cache = AnswerCache(cache_path)
+    port: Any = None
     try:
         usable = [pid for pid in photo_ids if signs[pid].image_status == "ok"]
         uncached = [pid for pid in usable if _needs_request(cache, c, signs[pid].crop_sha256)]
@@ -238,10 +247,10 @@ def _model_phase(
         if budget.circuit_open:
             skipped = sum(1 for r in results.values() for a in r.attempts if a.error_class == "circuit_open")
             warnings.append(f"circuit_open: {budget.circuit_error_class}, {skipped} pytań")
-        if hasattr(port, "close"):
-            port.close()  # one HTTP client per run (ADR-003 §3.3)
         return _ModelPhase(results, confirmation, manifest, budget, warnings, cascade.uncalibrated_warnings(), hits)
     finally:
+        if port is not None and hasattr(port, "close"):
+            port.close()  # one HTTP client per run, closed also on failure (ADR-003 §3.3, review finding)
         cache.close()
 
 
@@ -318,9 +327,13 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
         "split": args.split,
         "eval": eval_mode,
     }
-    run_id = _run_id(params, started)
+    if eval_mode == "calibrate" and args.split != "calibration":
+        raise ValidationError(
+            "Kalibracja progów działa wyłącznie na części calibration (ADR-004 §3.9)", code="invalid_split", hint="Użyj --split calibration"
+        )
+    grid = _parse_grid(args.grid) if eval_mode == "calibrate" else None
     reports_dir = Path(c.reports_dir)
-    out_dir = (reports_dir if reports_dir.is_absolute() else Path.cwd() / reports_dir) / run_id
+    out_dir, run_id = _unique_out_dir(reports_dir if reports_dir.is_absolute() else Path.cwd() / reports_dir, _run_id(params, started))
 
     split = photo_split(labels_root) if args.split != "all" else {}
     photo_ids = sorted(s.photo_id for s in bundle.signs if args.split == "all" or split.get(s.photo_id) == args.split)
@@ -356,10 +369,12 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
     candidates = build_candidates(inputs)
     queue = build_queue(candidates, inputs)
 
-    evaluation = run_evaluation(labels_root, results, split_name=None if args.split == "all" else args.split, with_model=model_used)
+    evaluation = run_evaluation(
+        labels_root, results, split_name=None if args.split == "all" else args.split, with_model=model_used, photo_ids=set(photo_ids)
+    )
     calibration: dict[str, Any] | None = None
     if eval_mode == "calibrate" and model_used:
-        cal = calibrate(calibration_pairs(labels_root, results, level=1), target_accuracy=args.target_accuracy)
+        cal = calibrate(calibration_pairs(labels_root, results, level=1), target_accuracy=args.target_accuracy, grid=grid)
         calibration = cal.model_dump(mode="json") if hasattr(cal, "model_dump") else cal.__dict__
 
     # ---- report ---------------------------------------------------------------------------

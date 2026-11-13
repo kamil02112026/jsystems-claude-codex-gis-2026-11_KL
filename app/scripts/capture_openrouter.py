@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 
 from mapqa.models.image_prep import prepare_image
+from mapqa.models.openrouter import usage_cost
 from mapqa.models.requests import CHAT_URL, DECISIONS_URL, chat_body, decisions_body
 from mapqa.questions.catalog import SPEED_LIMIT_VALUE
 
@@ -92,10 +93,10 @@ def capture_record(*, step: Step, url: str, request_body: dict[str, Any], respon
     }
 
 
-def _cost(body: str) -> Decimal | None:
+def _response_cost(body: str) -> Decimal | None:
+    """BYOK-aware cost via the client's helper (review finding: a copied helper ignored cost_details)."""
     try:
-        usage = json.loads(body).get("usage") or {}
-        return Decimal(str(usage["cost"])) if "cost" in usage else None
+        return usage_cost(json.loads(body).get("usage") or {})
     except (ValueError, AttributeError):
         return None
 
@@ -141,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
                 break
             record = capture_record(step=step, url=url, request_body=body, response=response, secret=key)
             (OUT / f"{step.name}.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            cost = _cost(response.text)
+            cost = _response_cost(response.text)
             # missing usage.cost counts as the conservative per-request reserve, so the 0.20 USD cap still holds
             spent += cost if cost is not None else RESERVE_USD
             print(f"  {i}. {step.name}: HTTP {response.status_code}, usage.cost={cost}")

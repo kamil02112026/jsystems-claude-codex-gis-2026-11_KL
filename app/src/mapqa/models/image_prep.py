@@ -34,7 +34,10 @@ class PreparedImage:
 
 
 def prepare_image(path: Path) -> PreparedImage:
-    raw = path.read_bytes()
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:  # deleted/locked/unreadable after loading: per-photo failure, not a run abort
+        raise ImageOutOfBounds(f"unreadable file: {type(exc).__name__}") from exc
     source_sha256 = hashlib.sha256(raw).hexdigest()
     try:
         src = Image.open(io.BytesIO(raw))

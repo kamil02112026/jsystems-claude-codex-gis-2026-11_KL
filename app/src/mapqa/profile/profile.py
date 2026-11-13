@@ -6,7 +6,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from mapqa.contract.bundle import SignsBundle
-from mapqa.normalize.maxspeed import normalize_maxspeed
+from mapqa.normalize.osm import osm_speed_value
 
 SAMPLE_NOTE = (
     "Próbka jest obciążona: zestaw signs dobrano przez widoczne znaki, a drogi przy zdjęciach mają maxspeed "
@@ -45,10 +45,10 @@ def build_profile(bundle: SignsBundle, *, bbox_text: str | None) -> Profile:
         lk = links.get(sign.photo_id)
         if lk is None:
             continue
-        value = normalize_maxspeed(lk.maxspeed, maxspeed_type=lk.maxspeed_type, source_maxspeed=lk.source_maxspeed)
+        value = osm_speed_value(lk)  # same logic as the comparison (incl. directional tags)
         if value.status == "ok":
             usable += 1
-            if lk.maxspeed:
+            if lk.maxspeed or lk.maxspeed_forward or lk.maxspeed_backward:
                 with_number += 1
             else:
                 implicit_only += 1

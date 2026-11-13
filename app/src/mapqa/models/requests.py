@@ -19,6 +19,8 @@ CHAT_INSTRUCTION = (
 
 
 def _data_url(image: PreparedImage) -> str:
+    if image.mime not in ("image/jpeg", "image/png"):
+        raise ValueError(f"unsupported image MIME type: {image.mime}")
     return f"data:{image.mime};base64," + base64.b64encode(image.data).decode("ascii")
 
 
@@ -36,7 +38,10 @@ def decisions_body(*, model: str, image: PreparedImage, question: Question, imag
     }
     if image_format == "state_image_url":
         return {"model": model, "state": [{"type": "image_url", "image_url": {"url": _data_url(image)}}], "questions": questions}
-    fmt = "jpeg" if image.mime == "image/jpeg" else "png"
+    formats = {"image/jpeg": "jpeg", "image/png": "png"}
+    if image.mime not in formats:  # never mislabel bytes (review finding: hard-coded MIME)
+        raise ValueError(f"unsupported image MIME type: {image.mime}")
+    fmt = formats[image.mime]
     return {
         "model": model,
         "assets": {"image": {"type": "image", "format": fmt, "data_base64": base64.b64encode(image.data).decode("ascii")}},

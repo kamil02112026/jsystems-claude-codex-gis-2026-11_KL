@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
+from mapqa.contract.hashing import sha256_file
+
 STORABLE_STATUSES = frozenset({"confident", "below_threshold", "invalid_response"})
 _SEPARATOR = "\x1f"
 
@@ -37,9 +39,7 @@ CREATE TABLE IF NOT EXISTS answer_cache (
 """
 
 
-def file_sha256(path: Path) -> str:
-    """sha256 bajtów pliku; nazwa pliku nie wchodzi do wyniku."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+file_sha256 = sha256_file  # single shared helper (contract.hashing)
 
 
 @dataclass(frozen=True)

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import csv
-import hashlib
+import math
+from collections import Counter
 from pathlib import Path
 
 from mapqa.config.schema import FilesSource
 from mapqa.contract.bundle import Bbox, SignLink, SignRecord, SignsBundle
 from mapqa.contract.db import connect, sql_path
-from mapqa.contract.errors import SourceUnavailable
+from mapqa.contract.errors import ContractViolation, SourceUnavailable
+from mapqa.contract.hashing import sha256_file
 from mapqa.contract.models import RejectedRecord, SourceDescriptor
 
 TABLE_FILES = {
@@ -21,12 +23,18 @@ TABLE_FILES = {
 }
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+_sha256 = sha256_file
+
+
+def _coords(lon_text: str | None, lat_text: str | None) -> tuple[float, float] | None:
+    """WGS84 lon/lat or None when empty, not finite or out of range (review finding: unvalidated coordinates)."""
+    try:
+        lon, lat = float(lon_text or ""), float(lat_text or "")
+    except ValueError:
+        return None
+    if not (math.isfinite(lon) and math.isfinite(lat) and -180 <= lon <= 180 and -90 <= lat <= 90):
+        return None
+    return lon, lat
 
 
 def _opt(value: str | None) -> str | None:
@@ -93,8 +101,15 @@ class FilesAdapter:
 
         with open(signs_csv, encoding="utf-8", newline="") as handle:
             rows = list(csv.DictReader(handle))
+        dupes = sorted(pid for pid, n in Counter(r["photo_id"] for r in rows).items() if n > 1)
+        if dupes:  # a dict would silently keep one row (review finding)
+            raise ContractViolation(f"Powtórzone photo_id w signs/signs.csv: {', '.join(dupes[:5])}")
         for row in rows:
-            lon, lat = float(row["longitude"]), float(row["latitude"])
+            coords = _coords(row.get("longitude"), row.get("latitude"))
+            if coords is None:
+                rejected.append(RejectedRecord(dataset="signs", record_id=row["photo_id"], reason="invalid_value", detail="niepoprawne współrzędne"))
+                continue
+            lon, lat = coords
             if bbox is not None and not bbox.contains(lon, lat):
                 rejected.append(RejectedRecord(dataset="signs", record_id=row["photo_id"], reason="outside_bbox"))
                 continue

@@ -45,11 +45,15 @@ def run_evaluation(
     *,
     split_name: str | None,
     with_model: bool,
+    photo_ids: set[str] | None = None,
 ) -> EvaluationOutput:
+    """`photo_ids` = the run's photo set (after --bbox / --split), so every report section counts the same photos."""
     labels_csv, signs_csv, nearest_csv = _paths(labels_path)
     if not labels_csv.is_file():
         return EvaluationOutput(None, None)
     labels = load_sign_labels(labels_csv)
+    if photo_ids is not None:
+        labels = {pid: lab for pid, lab in labels.items() if pid in photo_ids}
     signs = load_signs(signs_csv)
     split = split_by_sequence({pid: row.sequence for pid, row in signs.items()}) if split_name else None
     baseline = mapillary_baseline(labels, signs, split, split_name)
