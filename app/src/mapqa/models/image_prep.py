@@ -11,7 +11,9 @@ from pathlib import Path
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 IMAGE_PREP_VERSION = "image_prep.v2"
-MIN_SIDE = 256
+# Jev docs say 256 px per side, but a real request with a 274×287 crop returned HTTP 400
+# "Invalid image dimensions" (capture 2026-11-13). 78 400 px = 280², so we require 280 px per side.
+MIN_SIDE = 280
 MAX_SIDE = 1568
 MIN_PIXELS = 78_400
 MAX_PIXELS = 2_458_624

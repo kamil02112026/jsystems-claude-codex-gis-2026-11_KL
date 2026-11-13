@@ -31,11 +31,12 @@ def test_version_constant() -> None:
     assert IMAGE_PREP_VERSION == "image_prep.v2"
 
 
-def test_small_crop_is_upscaled_so_shorter_side_is_256(tmp_path: Path) -> None:
+def test_small_crop_is_upscaled_so_shorter_side_is_280(tmp_path: Path) -> None:
+    # Jev returned HTTP 400 "Invalid image dimensions" for 274×287 (capture 2026-11-13): min side is 280 in practice
     prepared = prepare_image(_save(tmp_path / "crop.png", (120, 200)))
     img = _decode(prepared.data)
     assert img.format == "JPEG"
-    assert min(img.size) == 256
+    assert min(img.size) == 280
     assert max(img.size) <= 1568
     assert 78_400 <= img.size[0] * img.size[1] <= 2_458_624
 

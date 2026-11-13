@@ -44,14 +44,15 @@ class Step:
     image_format: str  # decisions: state_image_url | assets; chat: n/a
 
 
-def build_plan() -> list[Step]:
-    return [
+def build_plan(only: list[str] | None = None) -> list[Step]:
+    steps = [
         Step("jev_state_image_url", "decisions", "typesafe/jev-1.14", "state_image_url"),
         Step("jev_assets", "decisions", "typesafe/jev-1.14", "assets"),
         Step("luna_decisions_state_image_url", "decisions", "openai/gpt-6-luna-decisions", "state_image_url"),
         Step("luna_decisions_assets", "decisions", "openai/gpt-6-luna-decisions", "assets"),
         Step("luna_chat_medium", "chat", "openai/gpt-6-luna", "-"),
     ]
+    return [s for s in steps if s.name in only] if only else steps
 
 
 def _crop() -> Path:
@@ -102,8 +103,10 @@ def _cost(body: str) -> Decimal | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--execute", action="store_true", help="wyślij prawdziwe zapytania (tylko za zgodą właściciela)")
+    parser.add_argument("--only", help="lista kroków po przecinku (np. jev_state_image_url,luna_chat_medium)")
+    parser.add_argument("--continue-on-error", action="store_true", help="nie przerywaj po odpowiedzi ≠ 200 (nadal bez ponowień)")
     args = parser.parse_args(argv)
-    plan = build_plan()
+    plan = build_plan(args.only.split(",") if args.only else None)
     crop = _crop()
     image = prepare_image(crop)
     print(f"Plan nagrania: {len(plan)} zapytań (limit {MAX_REQUESTS}), maks. koszt {MAX_USD} USD, timeout {TIMEOUT_S} s, bez ponowień.")
@@ -142,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             # missing usage.cost counts as the conservative per-request reserve, so the 0.20 USD cap still holds
             spent += cost if cost is not None else RESERVE_USD
             print(f"  {i}. {step.name}: HTTP {response.status_code}, usage.cost={cost}")
-            if response.status_code != 200:
+            if response.status_code != 200 and not args.continue_on_error:
                 print("  Odpowiedź ≠ 200 — przerywam (zachowanie jak bezpiecznik, ADR-003 §3.5).")
                 break
     print(f"Łączny koszt wg usage.cost: {spent} USD. Nagrania: {OUT.relative_to(REPO)}")

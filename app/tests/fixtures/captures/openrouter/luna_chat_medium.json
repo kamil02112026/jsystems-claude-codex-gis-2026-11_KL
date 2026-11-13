@@ -1,0 +1,101 @@
+{
+  "meta": {
+    "captured_at": "2026-11-13T08:24:19+00:00",
+    "step": "luna_chat_medium",
+    "api": "chat",
+    "model": "openai/gpt-6-luna",
+    "image_format": "-",
+    "question_id": "speed_limit_value",
+    "prompt_version": "speed_limit_value.v1-b6da2dc6+image_prep.v2",
+    "httpx": "0.28.1"
+  },
+  "request": {
+    "url": "https://openrouter.ai/api/v1/chat/completions",
+    "body": {
+      "model": "openai/gpt-6-luna",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "max_tokens": 2048,
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Jaka wartość jest na znaku ograniczenia prędkości?\nDozwolone odpowiedzi: 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 140, brak znaku, nieczytelny.\nOdpowiedz wyłącznie w formacie JSON zgodnym ze schematem. `probability` to Twoje prawdopodobieństwo, że odpowiedź jest poprawna."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "<data-url redacted>"
+              }
+            }
+          ]
+        }
+      ],
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "speed_limit_value",
+          "strict": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "answer": {
+                "type": "string",
+                "enum": [
+                  "20",
+                  "30",
+                  "40",
+                  "50",
+                  "60",
+                  "70",
+                  "80",
+                  "90",
+                  "100",
+                  "110",
+                  "120",
+                  "140",
+                  "brak znaku",
+                  "nieczytelny"
+                ]
+              },
+              "probability": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "answer",
+              "probability"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  },
+  "response": {
+    "status_code": 200,
+    "headers": {
+      "date": "Fri, 13 Nov 2026 08:24:18 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "access-control-allow-origin": "*",
+      "x-generation-id": "gen-1794558257-bYTGHysPs9lQhLesjvzP",
+      "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,cf-ray",
+      "x-openrouter-release": "api;2d141a55-e374-45a4-b7f8-12b4f56a7199",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "content-encoding": "gzip",
+      "server": "cloudflare",
+      "cf-ray": "a59c6117bdeabf45-WAW",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "\n         \n{\"id\":\"gen-1794558257-bYTGHysPs9lQhLesjvzP\",\"object\":\"chat.completion\",\"created\":1794558257,\"model\":\"openai/gpt-6-luna\",\"provider\":\"OpenAI\",\"system_fingerprint\":null,\"service_tier\":\"default\",\"choices\":[{\"index\":0,\"logprobs\":null,\"finish_reason\":\"stop\",\"native_finish_reason\":\"completed\",\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"answer\\\":\\\"30\\\",\\\"probability\\\":0.99}\",\"refusal\":null,\"reasoning\":null,\"reasoning_details\":[{\"type\":\"reasoning.encrypted\",\"data\":\"gAAAAABq9skzinKSVPgpJlrh99klo7r5kuLJpA_GNH5RwwoniXbDOmfdn04fgT_mdZexPp9KevgL8LMC8FhXqlStEvdBIXCd-cTU_PJEA3fYSeKPuBL0KetuuLxOcRa2XfCYqs-c6NphMiGGkPVikgTC4SOCBM3tJGIzupZpUDMuWHpeujeGLGGq-dUB0Rojn9mpOgHl5amFNVL5yR8dBit_WHJr3K0oKLdOQrLz3GH5gBSatmDhYczGkdRxwaxUqF5GEKIBBMp-hclAOTVHiKe6Yp6k0q8zvkYqqDF-qDgqgRpzR6Ndu9IC_66Mt1VfRc8GC8irO-CxpFSB6_xPUwoQPYQiCktNvfsseLZg6W8mBBvs4GW9PwI9iItXodT2JN8CEEqDlqGh2NKP9qfLLYutF1cTzcMHNqvhmo3w2EEj6Aofs7uD-9uzxG0aLvxYSvzuN4rSWdE1oj4bV2rsEwt-IYEiyZW-FukBkRTsVmPo0h3usJkAVpBbLgHTWiUoDlU69cGZcztcn9UU8e_1_RrADZGwAkJOyCxcdhM5_FVc9adkxpakiOiQMwtkOTWjvjpsP662p32Uqs6oI1cwFdPsyqegOfbwnrHk_svjU3jUtUKmYCea-yGyfKWyBDHF70xnpAtBmEhgI2PeN9-d9yLR6pTxhDd4QWhsK3jr6OWkhZ8XVt7pmYosGOwtw0AIHWF-tEG6dCCJTfkhFX9HXTKoD7jJjd5Ctc7klF0fuUmCOu2ltp1_lPHzUEJdu5xKtvfL_0Rm3EBkiwHhgxBoawC1A-DSpAr3Dn6KLXyVwTlqSgEFUzRlWkLWAxKdD9lSyy3sa0-4-KJ5ehzyrR6XWup6Yi2pWu0zhkzBD5T8Nce86RlTjb5B8TzY8DDeBNHJbyjvGHEa0fMY3kC_N9D5dzESA3UgIoXPNmPK2fULucALV59nRaHJ8CDOFatyv5fs8Xg1oa3pO_iS8A9_iChJqTu9PFtSctsavfv28nBRObmkwOuVxP3fB28C1rPog8nerCD7WH9Ds2cSlTLCfTBlJz4GWjUyG3DXV_gfw8CClLjxRvQl6uZApWMCjrAn10__fbpdaxTEuCRUliQ1JMjvzu0GSv6PPTmf__Y9SZT2IaB4pW5aXyDGOFgFpboBJP2woX9IoMYeY2yf5rjbO41iDZyJZROltuBbc1fG3btizP1bFXBsx3A-tQKKp6Tb38HhlUR3h193eOgPXRzVdnnrHfjVrHuZH7_vKKZVBZsitwJHgAlzpn6agCWU8fPAmHWeowRZ_foCAhnlKiYpM1YWZSCHpkUvsaIxCya5F7qY7AmOiIJylTQLmNg1EN1Dkad1X87sYsYUnKlhNU5sdT-w5VVlogFJdRZQMJCw2B8HW7tDrp_l2MK4_OoDSGwkGvbYs5ZSfwnRYOveHTMEvZo6FPnDk30wWUthT3TyYN2-vudp_wyqI0Z56vgL0LPDiSn5CHHRPHj5hxpITSS3EFspv445xC2W_l0oF4zffCxqSgfuhSXFCPePIXCH6AaiY4kghb2KhVaoVMWVAqqcrYnkBHhoYyyF1PYZ6B1wEKXtuMTPgYcAXcHyDZmNZ0rFHiWjTEkdImsbS0ohu2_kGAtDDqRSC0HMVR2gLqkuJvBf5-Z_0BRNR4HqM33pZozxCVN-JEIsFcqK8ZDj-dSfw-pex6Fus4Yu1i6DW7RU4ZS_PU8RuylqaOlSuk96Zdt9y0rnz2ppE4foqfU7CQdCmnTHiaqLHNGQpEv7lNxP_xy8mbwshkVrVa1TDgYbzhi82SqmeXWI-wKuOnCu5_cISYm7zB5XWtM4fqJCFABUeJP5_QTXiQGHfVH-RjIwEYK-EukHr01vCKuBXJY8VZSENIH81bDjCC-ihd_q9eBqrHW4ADCYIREfeK9v-LWESIiipHVWmdumDKr57EDT20qojvHXHhFEJUgmOvLm4g==.eyJlbmRwb2ludF9zbHVnIjoib3BlbmFpL2dwdC02LWx1bmEtMjAyNjA5MjJ8b3BlbmFpIn0\",\"format\":\"openai-responses-v1\",\"id\":\"rs_002f97f020b01fed016af6c93350f887d2bffbbfb44fcbd3b5\",\"index\":0}]}}],\"usage\":{\"prompt_tokens\":286,\"completion_tokens\":39,\"total_tokens\":325,\"cost\":0,\"is_byok\":true,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.0000481,\"upstream_inference_prompt_cost\":0.0000286,\"upstream_inference_completions_cost\":0.0000195},\"completion_tokens_details\":{\"reasoning_tokens\":16,\"image_tokens\":0,\"audio_tokens\":0}}}"
+  }
+}
