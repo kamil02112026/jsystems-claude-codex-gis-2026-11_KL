@@ -152,6 +152,63 @@ def test_directional_one_unparseable_differs():
     assert r is not None and r.status == "not_comparable"
 
 
+# NRM-02 with camera direction (ADR-002 §3.5, D-002-3): forward when directed diff <= 90, else backward
+def test_directional_heading_picks_forward():
+    r = normalize_directional("50", "70", directed_bearing_diff=10)
+    assert r is not None
+    assert r.normalized == 50 and r.status == "ok" and r.speed_source == "explicit"
+    assert r.note.startswith("kierunek wywnioskowany z heading")
+    assert "forward" in r.note
+    assert r.raw == {"maxspeed:forward": "50", "maxspeed:backward": "70"}
+
+
+def test_directional_heading_picks_backward():
+    r = normalize_directional("50", "70", directed_bearing_diff=170)
+    assert r is not None
+    assert r.normalized == 70 and r.status == "ok"
+    assert r.note.startswith("kierunek wywnioskowany z heading")
+    assert "backward" in r.note
+
+
+def test_directional_heading_none_stays_not_comparable():
+    r = normalize_directional("50", "70", directed_bearing_diff=None)
+    assert r is not None and r.status == "not_comparable"
+    assert r.note == "kierunek nieznany (MVP)"
+
+
+def test_directional_heading_gate_bearing_over_30_not_comparable():
+    # bearing_diff = min(60, 120) = 60 > 30 -> direction not inferred (D-002-3)
+    r = normalize_directional("50", "70", directed_bearing_diff=60)
+    assert r is not None and r.status == "not_comparable" and r.normalized is None
+    assert r.note.startswith("kierunek nieznany")
+
+
+def test_directional_heading_gate_uses_bearing_diff_both_sides():
+    # directed 155 -> bearing_diff 25 <= 30 -> backward; directed 25 -> forward
+    assert normalize_directional("50", "70", directed_bearing_diff=155).normalized == 70
+    assert normalize_directional("50", "70", directed_bearing_diff=25).normalized == 50
+
+
+def test_directional_equal_ignores_heading():
+    r = normalize_directional("50", "50", directed_bearing_diff=170)
+    assert r is not None and r.status == "ok" and r.normalized == 50
+    assert "heading" not in r.note
+
+
+def test_osm_speed_value_passes_heading_through():
+    from mapqa.contract.bundle import SignLink
+    from mapqa.normalize.osm import osm_speed_value
+
+    link = SignLink(
+        photo_id="p1", osm_way_id=1, distance_m=1.0, heading_diff_deg=None, highway="primary",
+        maxspeed=None, maxspeed_forward="50", maxspeed_backward="70", maxspeed_conditional=None,
+        oneway=None, candidate_count=1, match_flags=(), osm_source="x", osm_timestamp=None,
+    )
+    assert osm_speed_value(link).status == "not_comparable"  # MVP behaviour without heading
+    r = osm_speed_value(link, directed_bearing_diff=170)
+    assert r.normalized == 70 and r.status == "ok"
+
+
 # equality
 @pytest.mark.parametrize(
     ("a", "b", "expected"),

@@ -163,14 +163,37 @@ def normalize_maxspeed(
     )
 
 
+HEADING_GATE_DEG = 30.0  # ADR-002 §3.5 / D-002-3: direction inferred only when bearing_diff <= 30
+
+
+def _by_heading(
+    f: AttributeValue, b: AttributeValue, directed_bearing_diff: float, raw: dict[str, str]
+) -> AttributeValue:
+    """ADR-002 §3.5: forward when the camera points at most 90 deg from the way direction, else backward."""
+    bearing_diff = min(directed_bearing_diff, 180 - directed_bearing_diff)
+    if bearing_diff > HEADING_GATE_DEG:
+        return AttributeValue(
+            raw=raw,
+            normalized=None,
+            status="not_comparable",
+            note=f"kierunek nieznany: kurs kamery odbiega od drogi o {bearing_diff:.0f}° (> {HEADING_GATE_DEG:.0f}°)",
+        )
+    chosen, side = (f, "forward") if directed_bearing_diff <= 90 else (b, "backward")
+    return chosen.model_copy(
+        update={"raw": raw, "note": _join(chosen.note, f"kierunek wywnioskowany z heading: {side}")}
+    )
+
+
 def normalize_directional(
     forward: str | None,
     backward: str | None,
     *,
     maxspeed_type: str | None = None,
     source_maxspeed: str | None = None,
+    directed_bearing_diff: float | None = None,
 ) -> AttributeValue | None:
-    """MVP rule (U2): differing directions are not comparable."""
+    """Directional maxspeed (ADR-002 §3.5). Differing directions need the camera-vs-way angle
+    (0–180 deg); without it they stay not comparable (MVP)."""
     has_f, has_b = _clean(forward) is not None, _clean(backward) is not None
     if not has_f and not has_b:
         return None
@@ -189,9 +212,11 @@ def normalize_directional(
         and b.normalized is not None
         and speeds_equal(float(f.normalized), float(b.normalized))
     )
-    if not equal:
-        return AttributeValue(
-            raw=raw, normalized=None, status="not_comparable", note="kierunek nieznany (MVP)"
-        )
-    source = "implicit" if f.speed_source == b.speed_source == "implicit" else "explicit"
-    return f.model_copy(update={"raw": raw, "speed_source": source})
+    if equal:
+        source = "implicit" if f.speed_source == b.speed_source == "implicit" else "explicit"
+        return f.model_copy(update={"raw": raw, "speed_source": source})
+    if directed_bearing_diff is not None:
+        return _by_heading(f, b, directed_bearing_diff, raw)
+    return AttributeValue(
+        raw=raw, normalized=None, status="not_comparable", note="kierunek nieznany (MVP)"
+    )

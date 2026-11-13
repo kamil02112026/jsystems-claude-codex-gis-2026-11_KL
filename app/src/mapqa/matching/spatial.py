@@ -12,6 +12,7 @@ from mapqa.contract.bundle import PhotoRecord
 from mapqa.contract.db import sql_path
 from mapqa.contract.models import PhotoRoadLink
 from mapqa.matching.crs import distance_sql, initial_bearing, to_2180_sql
+from mapqa.matching.flags import grade_separated_tags, service_or_restricted_tags
 
 
 class SpatialMatcher:
@@ -122,13 +123,9 @@ class SpatialMatcher:
                     flags.add('boundary_crossing')
                 if best['highway'] in {'service', 'track'}:
                     flags.add('service_way')
-                if best['highway'] == 'service' or any(
-                    best[tag] in {'private', 'no', 'destination'} for tag in ('access', 'motor_vehicle')
-                ):
+                if service_or_restricted_tags(best):
                     flags.add('service_or_restricted')
-                if any(best[tag] not in (None, '', 'no') for tag in ('bridge', 'tunnel')) or (
-                    best['layer'] not in (None, '') and float(best['layer']) != 0
-                ):
+                if grade_separated_tags(best):
                     flags.add('grade_separated')
                 if best['diff'] is not None and best['diff'] > 30:
                     flags.add('poor_heading_alignment')
