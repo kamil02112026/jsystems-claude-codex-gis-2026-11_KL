@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "captured_at": "2026-11-13T08:24:17+00:00",
+    "step": "luna_decisions_state_image_url",
+    "api": "decisions",
+    "model": "openai/gpt-6-luna-decisions",
+    "image_format": "state_image_url",
+    "question_id": "speed_limit_value",
+    "prompt_version": "speed_limit_value.v1-b6da2dc6+image_prep.v2",
+    "httpx": "0.28.1"
+  },
+  "request": {
+    "url": "https://openrouter.ai/api/alpha/decisions",
+    "body": {
+      "model": "openai/gpt-6-luna-decisions",
+      "state": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "<data-url redacted>"
+          }
+        }
+      ],
+      "questions": {
+        "speed_limit_value": {
+          "type": "choice",
+          "instructions": "Jaka wartość jest na znaku ograniczenia prędkości?",
+          "criteria": {
+            "20": "Okrągły znak B-33 z wartością 20 km/h",
+            "30": "Okrągły znak B-33 z wartością 30 km/h",
+            "40": "Okrągły znak B-33 z wartością 40 km/h",
+            "50": "Okrągły znak B-33 z wartością 50 km/h",
+            "60": "Okrągły znak B-33 z wartością 60 km/h",
+            "70": "Okrągły znak B-33 z wartością 70 km/h",
+            "80": "Okrągły znak B-33 z wartością 80 km/h",
+            "90": "Okrągły znak B-33 z wartością 90 km/h",
+            "100": "Okrągły znak B-33 z wartością 100 km/h",
+            "110": "Okrągły znak B-33 z wartością 110 km/h",
+            "120": "Okrągły znak B-33 z wartością 120 km/h",
+            "140": "Okrągły znak B-33 z wartością 140 km/h",
+            "brak znaku": "Nie widać znaku ograniczenia prędkości B-33",
+            "nieczytelny": "Znak ograniczenia prędkości jest w kadrze, ale wartości nie da się odczytać"
+          }
+        }
+      }
+    }
+  },
+  "response": {
+    "status_code": 200,
+    "headers": {
+      "date": "Fri, 13 Nov 2026 08:24:17 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,cf-ray",
+      "x-generation-id": "gen-dec-1794558256-IK2NjSlbAquW1aroTb8S",
+      "x-provider-name": "Azure",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "content-encoding": "gzip",
+      "server": "cloudflare",
+      "cf-ray": "a59c6111f91dbf45-WAW",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"model\":\"openai/gpt-6-luna-decisions-20261006\",\"answers\":{\"speed_limit_value\":{\"type\":\"choice\",\"choice\":\"30\",\"probabilities\":{\"20\":0,\"30\":1,\"40\":0,\"50\":0,\"60\":0,\"70\":0,\"80\":0,\"90\":0,\"100\":0,\"110\":0,\"120\":0,\"140\":0,\"brak znaku\":0,\"nieczytelny\":0},\"confidence\":1}},\"usage\":{\"input_tokens\":516,\"output_tokens\":0,\"cost\":0,\"is_byok\":true,\"cost_details\":{\"upstream_inference_cost\":0.0000516,\"upstream_inference_prompt_cost\":0.0000516,\"upstream_inference_completions_cost\":0}},\"id\":\"gen-dec-1794558256-IK2NjSlbAquW1aroTb8S\",\"provider\":\"Azure\"}"
+  }
+}

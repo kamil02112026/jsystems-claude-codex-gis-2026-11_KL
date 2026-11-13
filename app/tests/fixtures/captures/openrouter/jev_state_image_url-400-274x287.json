@@ -1,0 +1,68 @@
+{
+  "meta": {
+    "captured_at": "2026-11-13T08:22:22+00:00",
+    "step": "jev_state_image_url",
+    "api": "decisions",
+    "model": "typesafe/jev-1.14",
+    "image_format": "state_image_url",
+    "question_id": "speed_limit_value",
+    "prompt_version": "speed_limit_value.v1-b6da2dc6+image_prep.v2",
+    "httpx": "0.28.1"
+  },
+  "request": {
+    "url": "https://openrouter.ai/api/alpha/decisions",
+    "body": {
+      "model": "typesafe/jev-1.14",
+      "state": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "<data-url redacted>"
+          }
+        }
+      ],
+      "questions": {
+        "speed_limit_value": {
+          "type": "choice",
+          "instructions": "Jaka wartość jest na znaku ograniczenia prędkości?",
+          "criteria": {
+            "20": "Okrągły znak B-33 z wartością 20 km/h",
+            "30": "Okrągły znak B-33 z wartością 30 km/h",
+            "40": "Okrągły znak B-33 z wartością 40 km/h",
+            "50": "Okrągły znak B-33 z wartością 50 km/h",
+            "60": "Okrągły znak B-33 z wartością 60 km/h",
+            "70": "Okrągły znak B-33 z wartością 70 km/h",
+            "80": "Okrągły znak B-33 z wartością 80 km/h",
+            "90": "Okrągły znak B-33 z wartością 90 km/h",
+            "100": "Okrągły znak B-33 z wartością 100 km/h",
+            "110": "Okrągły znak B-33 z wartością 110 km/h",
+            "120": "Okrągły znak B-33 z wartością 120 km/h",
+            "140": "Okrągły znak B-33 z wartością 140 km/h",
+            "brak znaku": "Nie widać znaku ograniczenia prędkości B-33",
+            "nieczytelny": "Znak ograniczenia prędkości jest w kadrze, ale wartości nie da się odczytać"
+          }
+        }
+      }
+    }
+  },
+  "response": {
+    "status_code": 400,
+    "headers": {
+      "date": "Fri, 13 Nov 2026 08:22:22 GMT",
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+      "connection": "keep-alive",
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,cf-ray",
+      "x-generation-id": "gen-dec-1794558142-MY0iEOczamLoT0OLm29W",
+      "x-openrouter-error-origin": "provider",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "x-content-type-options": "nosniff",
+      "server": "cloudflare",
+      "cf-ray": "a59c5e46f80c15f8-WAW",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\"error\":{\"message\":\"HTTP 400: {\\\"detail\\\":{\\\"error_type\\\":\\\"api_usage_error\\\",\\\"message\\\":\\\"Invalid image dimensions.\\\"}}\",\"code\":400}}"
+  }
+}

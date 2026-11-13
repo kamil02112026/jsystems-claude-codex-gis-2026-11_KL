@@ -21,5 +21,11 @@ __pycache__/
 /.idea
 /.claude/worktrees
 
-# Generated map QA run outputs (reports, thumbnails, cost logs)
-/reports/
+# Generated run outputs (reports, thumbnails, cost logs); keep the curated data profile
+/reports/*
+!/reports/map-qa/
+/reports/map-qa/*
+!/reports/map-qa/profile.md
+
+# Python virtual environments
+.venv/

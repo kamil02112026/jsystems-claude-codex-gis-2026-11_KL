@@ -20,8 +20,9 @@ Nie obejmuje: samej kaskady (ADR-003), normalizacji (ADR-002).
 | Biblioteka / źródło | Context7 ID albo dokumentacja | Zastosowanie |
 |---|---|---|
 | Jinja2 3.1.6 | https://jinja.palletsprojects.com/en/stable/ | Szablony `report.md.j2`, `report.html.j2`; autoescape dla HTML |
-| Pillow 13.0.0 | https://pillow.readthedocs.io/en/stable/ | Miniatury 320 px |
-| pandas 3.1.0 | https://pandas.pydata.org/docs/ | Zapis CSV, agregacje metryk |
+| Pillow 12.0.0 | https://pillow.readthedocs.io/en/stable/ | Miniatury 320 px (wersja jak w danych kursu, ADR-000 §2) |
+| DuckDB 1.5.6 / stdlib `csv` | `/websites/duckdb_current`; https://docs.python.org/3.12/library/csv.html | Agregacje metryk (DuckDB); zapis `manual_queue.csv` z BOM i cytowaniem RFC 4180 (`csv`, ADR-000 D2 — bez pandas) |
+| argparse | https://docs.python.org/3.12/library/argparse.html | Polecenia `eval run`, `eval calibrate` (ADR-000 D13) |
 | Atrybucja danych | `course-materials/exercise-data/map-qa/ATTRIBUTION.md` | Tekst licencji ODbL / CC BY-SA w raporcie |
 | OpenRouter cookbook „jev-classification” | `/openrouterteam/docs` | Kalibracja progu po pasmach pewności na próbie z etykietami |
 
@@ -42,7 +43,7 @@ Wejście: `PhotoRoadLink` (z `osm_way_id` nie null), `AttributeValue` OSM (i Ove
 
 Bez kandydata: OSM `not_comparable` (powód widoczny w sekcji „Nieporównywalne”), odpowiedzi `brak znaku`/`nieczytelny`/`nie widać` (D10-I1), zdjęcie bez drogi (F3.4), zgodność odczytu z OSM (F6.4 — zgodność nie potwierdza poprawności, ale nie trafia do kolejki).
 
-Porównanie wartości: prędkość — liczba km/h; nawierzchnia — `utwardzona` ↔ `paved`, `nieutwardzona` ↔ `unpaved`; oświetlenie — `tak` ↔ `yes`, `nie` ↔ `no`.
+Porównanie wartości: prędkość — liczba km/h, równe przy |Δ| < 0,5 km/h (ADR-002 §3.5); wartość OSM `speed_source = implicit` (`PL:*`) jest porównywana, ale kandydat ma oznaczenie `implicit` w powodzie i w CSV (`osm_normalized` z dopiskiem `(implicit)`); nawierzchnia — `utwardzona` ↔ `paved`, `nieutwardzona` ↔ `unpaved` (`unknown_value` → OSM `not_comparable`); oświetlenie — `tak` ↔ `yes` albo `yes_conditional`, `nie` ↔ `no`.
 
 ### 3.2 Priorytety (F6.3)
 
@@ -62,14 +63,14 @@ Szablony po polsku, identyfikatory i nazwy tagów w oryginale (w Markdown w back
 - `sources_disagree_photo_supports`: „OSM `maxspeed={raw}`, Overture {wartość}; zdjęcie wskazuje {odczyt} (zgodne z {OSM|Overture}).”
 - `sources_only`: „OSM `maxspeed={raw}`, Overture {wartość}; zdjęcie nie rozstrzyga ({powód}).”
 - `nierozstrzygnięty_odczyt`: „Brak pewnego odczytu: poziom 1 {odpowiedź} p={…} ({powód}), poziom 2 {odpowiedź} p={…} ({powód}).”
-Analogiczne szablony dla `surface`/`lit`. Każdy powód kończy się listą flag połączenia, jeśli są: „Flagi: `ambiguous_candidates`, `service_way`.”
+Przy wartości `implicit` `{raw}` ma postać „`maxspeed=PL:urban` (implicit, 50 km/h)”, a powód kończy się zdaniem „Porównanie z wartością domyślną, nie ze znakiem.”. Analogiczne szablony dla `surface`/`lit` (dla `yes_conditional`: „OSM `lit=automatic` (`lit` warunkowe)”). Każdy powód kończy się listą flag połączenia, jeśli są: „Flagi: `ambiguous_candidates`, `service_way`.”
 
 Liczby z przecinkiem dziesiętnym (format polski), dwa miejsca po przecinku dla pewności.
 
 ### 3.4 Kolejka ręczna (F6.5–F6.7)
 
 - `item_id` = pierwsze 16 znaków hex `sha256("{photo_sha256}|{attribute}|{osm_way_id}")` — stabilne między runami (kryterium 14).
-- Pozycja `nierozstrzygnięty_odczyt` powstaje dla `final_status ∈ {abstain, model_unavailable, budget_exceeded}` i `osm_way_id` nie null (D10-I4). Jedna para zdjęcie × atrybut daje najwyżej jedną pozycję.
+- Pozycja `nierozstrzygnięty_odczyt` powstaje dla `final_status ∈ {abstain, model_unavailable, budget_exceeded, image_out_of_bounds}` i `osm_way_id` nie null (D10-I4). Jedna para zdjęcie × atrybut daje najwyżej jedną pozycję.
 - `manual_queue.csv`: UTF-8 z BOM (poprawne polskie znaki w Excelu na Windows), separator `,`, cytowanie RFC 4180, nagłówek w kolejności:
   `item_id, typ, atrybut, priorytet, powod, photo_id, photo_path, photo_captured_at, photo_author, photo_license, photo_source_url, osm_way_id, overture_id, osm_raw, osm_normalized, overture_raw, overture_normalized, l1_model, l1_answer, l1_probability, l1_status, l2_model, l2_answer, l2_probability, l2_status, resolved_by, final_status, link_flags, decyzja, wartość_z_terenu, komentarz`.
   Ostatnie trzy kolumny puste. Listy (flagi) łączone `;`.
@@ -77,25 +78,25 @@ Liczby z przecinkiem dziesiętnym (format polski), dwa miejsca po przecinku dla 
 
 ### 3.5 Katalog runu
 
-`reports/map-qa/<run_id>/` (ignorowany przez Git — `.gitignore` dostaje wpis `reports/`):
+`reports/map-qa/<run_id>/` (ignorowany przez Git: `.gitignore` ignoruje całe `reports/` poza `reports/map-qa/profile.md`, który jest profilem danych wejściowych, a nie wynikiem runu):
 - `run_id` = `YYYYMMDDTHHMMSSZ-<6 hex>` (UTC + skrót `sha256` parametrów `RunParams` bez `run_id`).
-- `run.json` — `RunParams`, `SourceDescriptor`, wersje narzędzia i bibliotek, podsumowanie (koperta `result` z ADR-000 §6).
+- `run.json` — `RunParams`, `SourceDescriptor` (z `input_hashes` przed i po runie), wersje narzędzia i bibliotek, podsumowanie (koperta `result` z ADR-000 §6). Przy kodzie 4 (`input_modified`, ADR-000 D12) `run.json` i nagłówek `report.md` zawierają ostrzeżenie „Dane wejściowe zmieniły się w trakcie uruchomienia — wyniki niewiarygodne” z listą ścieżek.
 - `report.md` [MVP], `report.html` [P4], `manual_queue.csv`, `evaluation.json` (gdy są etykiety), `costs.jsonl`, `thumbs/<photo_sha256>.jpg` (miniatury 320 px dłuższego boku, JPEG jakość 80).
 
 ### 3.6 Raport (F7)
 
 Sekcje `report.md` w tej kolejności (nagłówki po polsku):
-1. **Parametry uruchomienia** — bbox, atrybuty, zestaw, źródło (`SourceDescriptor`, F7.6), modele i effort, progi, limity, `run_id`, wersja narzędzia.
-2. **Profil danych** — liczności per zbiór (total / w bbox), kompletność `maxspeed`, `surface`, `lit` jako „x% (n/N)”, odrzucone rekordy według przyczyny, ostrzeżenia, zgodność połączeń z referencją [P1].
-3. **Lejek kaskady** — per atrybut: pytania ogółem → rozstrzygnięte na poziomie 1 → eskalowane → rozstrzygnięte na poziomie 2 → przekazane człowiekowi; liczby i odsetki z mianownikiem; osobno `abstain`, `model_unavailable`, `budget_exceeded`, `skipped_no_model`.
+1. **Parametry uruchomienia** — bbox, atrybuty, zestaw, źródło (`SourceDescriptor`, F7.6), `model_reading` i sposób potwierdzenia (`interactive`, `flag_yes`, `cache_only`, `declined`), manifest kosztu pokazany przed odczytem, modele i effort, progi, limity, `run_id`, wersja narzędzia. Bez odczytu modelem sekcje modelu mają tekst „Odczyt modelem nie był uruchomiony” (przyjęte za wersją referencyjną prowadzącego, ADR-004 §3.3).
+2. **Profil danych** — liczności per zbiór (total / w bbox), kompletność `maxspeed`, `surface`, `lit` jako „x% (n/N)”, odrzucone rekordy według przyczyny, ostrzeżenia, zgodność połączeń z referencją [P1]. Kompletność `maxspeed` liczy liczby **i** typy `PL:*` z `maxspeed:type`/`source:maxspeed` (ADR-002 §3.5). Liczności dla całego bboxu danych porównujemy z `reports/map-qa/profile.md`; rozbieżność to ostrzeżenie „profil nieaktualny albo dane zmienione”. Sekcja zawiera też adnotację o obciążeniu próbki zdjęć (PRD §7).
+3. **Lejek kaskady** — per atrybut: pytania ogółem → rozstrzygnięte na poziomie 1 → eskalowane → rozstrzygnięte na poziomie 2 → przekazane człowiekowi; liczby i odsetki z mianownikiem; osobno `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds`, `skipped_no_model`.
 4. **Podsumowanie kandydatów** — tabela atrybut × priorytet; liczba nieporównywalnych z powodami.
 5. **Kolejka ręcznej weryfikacji** — wiersze jak w F7.3: drogi (OSM way z linkiem `https://www.openstreetmap.org/way/<id>`, Overture id), miniatura (`thumbs/…`) z atrybucją (autor, licencja, link źródłowy), data zdjęcia, wartości surowe i znormalizowane, odczyt z pewnością i poziomem (przy eskalacji także odpowiedź poziomu 1), flagi, powód. Dla > 200 pozycji raport pokazuje pierwsze 200 i odsyła do CSV.
 6. **Rozbieżności znak ↔ OSM (MVP)** — liczba par z etykietą `certain` różną od OSM (oczekiwane 46 na danych kursu) i ich rozkład: potwierdzone pewnym odczytem modelu, przekazane człowiekowi (z przyczyną), odczytane inaczej niż etykieta.
 7. **Ewaluacja** — metryki §3.8, z mianownikami i liczbą wykluczonych `uncertain`; adnotacja dla nawierzchni o braku klasy `unpaved`.
-8. **Koszt** — całkowity, per poziom, na zapytanie, na kandydata; liczba trafień cache; oznaczenie kosztów szacowanych.
+8. **Koszt** — całkowity, per poziom, na zapytanie, na kandydata; liczba trafień cache; oznaczenie kosztów szacowanych; zużycie limitów (`queries_used`/`max_queries`, `images_used`/`max_images`, USD); przy otwartym bezpieczniku podsekcja „Odczyt przerwany: błąd API” z kodem błędu i liczbą pytań `circuit_open`.
 9. **Licencje i atrybucja** — OSM i Overture: ODbL 1.0; zdjęcia: CC BY-SA 4.0 z autorem i linkiem przy każdej miniaturze; tekst zgodny z `ATTRIBUTION.md`; zastrzeżenie: „Kandydat nie oznacza błędu mapy; decyzję podejmuje człowiek.”
 
-`report.html` [P4] — te same sekcje z tego samego modelu widoku, samodzielny plik (CSS w `<style>`, miniatury osadzone jako `data:image/jpeg;base64`), bez zewnętrznych zasobów i skryptów.
+`report.html` [P4] — te same sekcje z tego samego modelu widoku, CSS w `<style>`, bez skryptów i zewnętrznych zasobów. Miniatury przez **ścieżkę względną** `<img src="thumbs/<photo_sha256>.jpg">` do katalogu runu; obrazów **nie osadzamy** jako base64 (decyzja użytkownika 2026-11-12, przyjęte za wersją referencyjną prowadzącego, ADR-004 §3.5). Samodzielną jednostką jest katalog runu (`report.html` + `thumbs/`), nie pojedynczy plik. Gdy miniatury brak (brak pliku źródłowego albo `image_status ≠ ok`), wiersz pokazuje tekst „Miniatura niedostępna” i link do źródła zdjęcia z `source_url`; atrybucja pozostaje. Linki zewnętrzne tylko `https` z `rel="noopener noreferrer"`.
 
 Determinizm: poza `run_id` i czasami w sekcji 1 raport nie zawiera znaczników czasu; kolejność wszystkich tabel jest jawnie posortowana.
 
@@ -103,7 +104,7 @@ Determinizm: poza `run_id` i czasami w sekcji 1 raport nie zawiera znaczników c
 
 - Jednostka podziału: `sequence` (PRD §7). Przypisanie: `int(sha256(f"{seed}|{sequence}")[:8], 16) % 100 < 50` → `calibration`, inaczej `test`. Domyślny `seed = "mapqa-2026-11"`, zapisany w `run.json`.
 - Raport podaje liczby sekwencji i etykiet `certain` w każdej części oraz rozkład klas (liczby vs `none`).
-- Próbka przy przekroczeniu limitu (PRD §7 „Koszt”): gdy szacowana liczba zapytań (pytania × 1 + oczekiwane eskalacje 30%) > `max_queries`, ewaluacja losuje deterministycznie (ten sam `seed`) podzbiór sekwencji i raportuje jego wielkość.
+- Próbka przy przekroczeniu limitu (PRD §7 „Koszt”): gdy szacowana liczba zapytań (pytania × 1 + oczekiwane eskalacje 30%) > `max_queries` (100) albo liczba obrazów bez cache > `max_images` (25), ewaluacja losuje deterministycznie (ten sam `seed`) podzbiór sekwencji i raportuje jego wielkość.
 
 ### 3.8 Metryki (PRD §7, ADR-000 D10-I4)
 
@@ -112,7 +113,7 @@ Liczone per pytanie (prędkość: wycinki, pełne kadry osobno; nawierzchnia; o�
 | Metryka | Licznik | Mianownik |
 |---|---|---|
 | Trafność kaskady | `resolved` z `final_answer` = etykieta | `resolved` |
-| Odsetek przekazania człowiekowi | `final_status ∈ {abstain, model_unavailable, budget_exceeded}` | pytania z etykietą `certain` |
+| Odsetek przekazania człowiekowi | `final_status ∈ {abstain, model_unavailable, budget_exceeded, image_out_of_bounds}` | pytania z etykietą `certain` |
 | Odsetek eskalacji do poziomu 2 | pytania z poziomem 1 ≠ `confident` | pytania z etykietą `certain` |
 | Trafność poziomu 1 | poziom 1 `confident` i poprawny | poziom 1 `confident` |
 | Trafność poziomu 2 na eskalowanych | poziom 2 `confident` i poprawny | poziom 2 `confident` (tylko eskalowane) |
@@ -120,23 +121,27 @@ Liczone per pytanie (prędkość: wycinki, pełne kadry osobno; nawierzchnia; o�
 | Poziom 1 bez kaskady | trafność i pokrycie, gdzie poziom 1 ≠ `confident` = abstencja | jak wyżej |
 | Detektor Mapillary (baseline, prędkość) | `mapillary_value` (np. `regulatory--maximum-speed-limit-40--g1` → 40) = etykieta | etykiety `certain` z detekcją |
 
-Każda metryka w `evaluation.json` ma `numerator`, `denominator`, `value` (null przy mianowniku 0), plus liczby: `certain`, `uncertain_excluded`, `abstain`, `model_unavailable`, `budget_exceeded`. Progi akceptacji (§7 PRD) zapisane w `evaluation.json` jako `acceptance` z polem `passed` (bool) per metryka; nawierzchnia bez progu trafności (`passed = null`, adnotacja `no_negative_class`).
+Każda metryka w `evaluation.json` ma `numerator`, `denominator`, `value` (null przy mianowniku 0), plus liczby: `certain`, `uncertain_excluded`, `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds`. Progi akceptacji (§7 PRD) zapisane w `evaluation.json` jako `acceptance` z polem `passed` (bool) per metryka; nawierzchnia bez progu trafności (`passed = null`, adnotacja `no_negative_class`).
 
 ### 3.9 Kalibracja progów
 
 `mapqa eval calibrate` na części `calibration`:
 1. Poziom 1: dla każdego progu z siatki 0,50–0,99 (krok 0,01) liczy trafność poziomu 1 na odpowiedziach ≥ progu; wybiera **najniższy** próg z trafnością ≥ `target_accuracy` (0,90) przy co najmniej 10 odpowiedziach. Brak takiego progu → 1,00 (wszystko eskaluje) i ostrzeżenie.
 2. Poziom 2: pytania eskalowane przy wybranym progu poziomu 1 trafiają do poziomu 2 (z cache albo nowe zapytania w budżecie); próg wybierany tą samą regułą (warunek PRD: trafność poziomu 2 na eskalowanych ≥ 90%).
-3. Wynik: `calibration.json` w katalogu runu (progi per poziom × atrybut, tabela pasm pewności: n, poprawne, trafność). Progi nie są zapisywane automatycznie do konfiguracji — użytkownik przenosi je do `mapqa.toml` **przed** `mapqa eval run --split test` (PRD §7: próg ustalony przed końcową próbą).
+3. Wynik: `calibration.json` w katalogu runu (progi per poziom × model × atrybut — kalibracja dotyczy modelu użytego w runie, ADR-003 §3.5; tabela pasm pewności: n, poprawne, trafność). Progi nie są zapisywane automatycznie do konfiguracji — użytkownik przenosi je do `mapqa.toml` **przed** `mapqa eval run --split test` (PRD §7: próg ustalony przed końcową próbą).
 
 ---
+
+### 3.10 Izolacja etykiet referencyjnych
+
+Przyjęte za wersją referencyjną prowadzącego (ADR-003 §3, TAC-003-03): **tylko** moduł `evaluation` (komponent `Evaluator`, podmoduł `evaluation.labels`) czyta `reference_labels.csv` i `signs/labels.csv`. Etykiety nie są częścią `DataBundle` (ADR-001 §4), więc nie mogą trafić do kaskady, reguł kandydatów, kolejki ani żądań do modeli. `Evaluator` dostaje gotowe `CascadeResult` i zwraca `EvaluationReport`; wynik trafia do `ReportViewModel`, nigdy w odwrotnym kierunku. Sekcja raportu „Rozbieżności znak ↔ OSM (MVP)” korzysta z wyniku `Evaluator`, nie z etykiet bezpośrednio. Pusta etykieta nie jest zamieniana na `no` ani `none`.
 
 ## 4. Struktury danych
 
 - `Candidate`, `QueueItem`, `EvaluationReport` — ADR-000 §5.
 - `ReportViewModel`: sekcje §3.6 jako struktury gotowe do renderowania (posortowane listy, sformatowane liczby, ścieżki miniatur); jedyny obiekt przekazywany do Jinja2.
 - `evaluation.json`: `run_id`, `split`, `seed`, `questions` → { `question_id`: { `counts`, `cascade`, `level1`, `level2_escalated`, `level1_standalone`, `baseline_mapillary` (prędkość), `subgroups`, `acceptance`, `notes` } }, `cost` { `total_usd`, `per_level`, `per_query`, `per_candidate`, `estimated` }.
-- `calibration.json`: `split`, `target_accuracy`, `grid`, `thresholds` { `level1` / `level2` → { atrybut: wartość } }, `bands` (tabela), `warnings`.
+- `calibration.json`: `split`, `target_accuracy`, `grid`, `thresholds` { `level1` / `level2` → { model: { atrybut: wartość } } }, `bands` (tabela), `warnings`.
 
 ---
 
@@ -147,6 +152,8 @@ Każda metryka w `evaluation.json` ma `numerator`, `denominator`, `value` (null 
 | `build_candidates` | linki, wartości mapy, wyniki kaskady | lista `Candidate` | — |
 | `build_queue` | kandydaci, nierozstrzygnięte wyniki | posortowana lista `QueueItem` | — |
 | `write_run_outputs` | `ReportViewModel`, kolejka, ewaluacja | ścieżki plików | `OSError` → kod 1, komunikat ze ścieżką |
+| `verify_inputs_unchanged` | `input_hashes` sprzed runu | lista zmienionych ścieżek (pusta = OK) | niepusta → `InputModified`, kod 4 (ADR-000 §6) |
+| `evaluation.labels.load` | `labels_path` | etykiety `certain`/`uncertain` | jedyny czytelnik plików etykiet (§3.10) |
 | `split_by_sequence` | lista (`photo_id`, `sequence`), `seed` | mapa `photo_id` → `calibration`/`test` | sekwencja pusta → `ContractViolation` |
 | `evaluate` | wyniki kaskady, etykiety, podział | `EvaluationReport` | — |
 | `calibrate` | wyniki kaskady (calibration), `target_accuracy`, siatka | progi + pasma | — |
@@ -155,16 +162,18 @@ Każda metryka w `evaluation.json` ma `numerator`, `denominator`, `value` (null 
 
 ## 6. Decyzje techniczne
 
-### D-004-1. Miniatury kopiowane do katalogu runu
+### D-004-1. Miniatury kopiowane do katalogu runu, w MD i HTML przez ścieżkę względną
 **Status:** Accepted
-**Data:** 2026-11-03
-**Kontekst:** F7.3 wymaga miniatur z atrybucją; raport ma być przenośny, a ścieżki względne do `course-materials/` psują się po przeniesieniu katalogu.
-**Decyzja:** Miniatury 320 px w `thumbs/` (MD linkuje względnie), w HTML osadzone base64. Atrybucja przy każdej miniaturze (CC BY-SA 4.0 wymaga uznania autorstwa i tej samej licencji dla utworu zależnego).
+**Data:** 2026-11-03, zmieniona 2026-11-12
+**Kontekst:** F7.3 wymaga miniatur z atrybucją; raport ma być przenośny, a ścieżki względne do `course-materials/` psują się po przeniesieniu katalogu. Wersja z 2026-11-03 osadzała miniatury w HTML jako base64 — Superseded: decyzja użytkownika 2026-11-12, zgodność z wersją referencyjną (prowadzący, ADR-004 §3.5: „Obrazów nie osadzamy jako base64”).
+**Decyzja:** Miniatury 320 px w `thumbs/` katalogu runu; `report.md` i `report.html` linkują je **ścieżką względną** (`thumbs/<photo_sha256>.jpg`), bez base64. Brak miniatury → „Miniatura niedostępna” + link do źródła. Atrybucja przy każdej miniaturze (CC BY-SA 4.0 wymaga uznania autorstwa i tej samej licencji dla utworu zależnego).
 **Odrzucone alternatywy:**
-- Link do oryginału w `course-materials/`: raport nie działa poza repozytorium.
+- Link do oryginału w `course-materials/` (wariant prowadzącego): raport nie działa po przeniesieniu katalogu runu; kopia 320 px w `thumbs/` zachowuje przenośność katalogu.
+- Osadzanie base64 w HTML (nasza wersja z 2026-11-03): duży plik HTML, base64 w artefaktach utrudnia skan wycieków i przegląd diffów.
 - Pełne zdjęcia w raporcie: rozmiar.
 **Konsekwencje:**
-- (+) Samodzielny raport.
+- (+) Mały `report.html`, ten sam mechanizm w MD i HTML; katalog runu przenośny jako całość.
+- (-) `report.html` skopiowany bez `thumbs/` traci miniatury (pokazuje tekst alternatywny i atrybucję).
 - (-) Katalog runu rośnie (~20 kB × liczba pozycji).
 **Warunek rewizji:** Gdy raporty będą publikowane poza repozytorium (wymagana weryfikacja licencji dystrybucji).
 
@@ -275,28 +284,33 @@ sequenceDiagram
 | CND-02 poziom 2 / flagi | Unit | jak CND-01, `resolved_by=2` albo `ambiguous_candidates` | `średni` | `conditional_rule_present` → `średni` |
 | CND-03 brak OSM | Unit | OSM missing, pewny odczyt `30` | `osm_missing_photo_confident` | OSM `not_comparable` → brak kandydata |
 | CND-04 odpowiedzi bez wartości | Unit | pewne `brak znaku` przy OSM 50 | brak kandydata (D10-I1) | `nie widać` dla lit |
-| CND-05 zgodność | Unit | odczyt = OSM | brak kandydata | — |
+| CND-05 zgodność | Unit | odczyt = OSM | brak kandydata | odczyt 50, OSM `30 mph` (48,28) → różne (\|Δ\| ≥ 0,5) |
+| CND-07 implicit | Unit | odczyt `40`, OSM `maxspeed=PL:urban` | `photo_vs_osm`, powód z „implicit” i „Porównanie z wartością domyślną” | odczyt `50`, OSM `PL:urban` → brak kandydata, zgodność `implicit` w podsumowaniu |
 | CND-06 brak drogi | Unit | `osm_way_id = null`, pewny odczyt | brak kandydata i brak pozycji kolejki (F3.4) | — |
-| QUE-01 nierozstrzygnięte | Unit | `abstain`, `model_unavailable`, `budget_exceeded` z drogą | pozycja `nierozstrzygnięty_odczyt` (kryterium 7) | `skipped_no_model` → brak pozycji |
+| QUE-01 nierozstrzygnięte | Unit | `abstain`, `model_unavailable`, `budget_exceeded`, `image_out_of_bounds` z drogą | pozycja `nierozstrzygnięty_odczyt` (kryterium 7) | `skipped_no_model` → brak pozycji |
 | QUE-02 stabilne id | Unit | dwa runy, inna kolejność wejścia | identyczne `item_id` i kolejność (kryterium 14) | zmiana `run_id` |
 | QUE-03 kolumny | Unit | dowolna kolejka | nagłówek dokładnie §3.4, BOM, 3 puste kolumny decyzji (F6.6) | polskie znaki w powodzie, przecinek w autorze |
 | RPT-01 sekcje | Unit (snapshot) | `ReportViewModel` z fixture | `report.md` ma sekcje §3.6 w kolejności, teksty po polsku | 0 kandydatów → komunikat „Brak kandydatów” |
-| RPT-02 wiersz kandydata | Unit | kandydat z eskalacją | miniatura, atrybucja, wartości, odczyt z p, poziom, odpowiedź poziomu 1, flagi, powód (kryterium 10) | brak pliku miniatury → tekst „brak miniatury” |
-| RPT-03 HTML samodzielny | Unit [P4] | jak RPT-01 | brak odwołań `http(s)://` w `src`/`href` zasobów, miniatury jako `data:` | autoescape `<` w autorze |
+| RPT-02 wiersz kandydata | Unit | kandydat z eskalacją | miniatura, atrybucja, wartości, odczyt z p, poziom, odpowiedź poziomu 1, flagi, powód (kryterium 10) | brak pliku miniatury → tekst „Miniatura niedostępna” + link `source_url` |
+| RPT-03 HTML i miniatury | Unit [P4] | jak RPT-01, kandydat z miniaturą i kandydat bez pliku | brak `<script` i odwołań `http(s)://` w `src` zasobów; każdy `<img src>` względny (`thumbs/…`) i wskazuje istniejący plik; brak `data:` i base64 w HTML; placeholder „Miniatura niedostępna” dla brakującej | autoescape `<` w autorze; link `javascript:` odrzucony |
 | RPT-04 licencje | Unit | dowolny run | sekcja licencji z ODbL i CC BY-SA (F7.5) | — |
+| INP-01 zmiana wejścia | Integration | plik obrazu zmieniony po odczycie (hook testowy) | raport zapisany z ostrzeżeniem, `ok=false`, `input_modified`, kod 4 | brak zmian → kod 0 |
+| ISO-03 izolacja etykiet | Unit (architektura) | kod `app/src/mapqa/` | tylko `evaluation/` importuje `evaluation.labels` i zawiera nazwy plików etykiet; `DataBundle` nie ma pól etykiet | próba otwarcia `labels.csv` z innego modułu (monkeypatch `open`) → błąd testu |
 | EVL-01 podział | Unit | 103 sekwencje `signs` | deterministyczny podział, żadna sekwencja w obu częściach | zmiana seed → inny podział |
 | EVL-02 mianowniki | Unit | wyniki z abstencjami i `uncertain` | metryki §3.8 z poprawnymi licznikami; `uncertain` wykluczone i policzone (kryterium 11) | mianownik 0 → `value = null` |
 | EVL-03 baseline Mapillary | Unit | `mapillary_value` z `signs.csv` | wartość liczbowa z nazwy klasy | brak detekcji |
 | EVL-04 nawierzchnia | Unit | 99 × `paved` | adnotacja `no_negative_class`, `passed = null` | — |
 | CAL-01 wybór progu | Unit | syntetyczne pasma pewności | najniższy próg z trafnością ≥ 0,90 i n ≥ 10 | brak progu → 1,00 + ostrzeżenie |
-| E2E-01 `--no-model` | E2E | `mapqa run --no-model --dataset signs` | raport, CSV, lejek z `skipped_no_model`, kod 0 | — |
-| E2E-02 płatny MVP | E2E `paid` | 119 wycinków | sekcja „Rozbieżności znak ↔ OSM” z 46 parami; metryki osobno dla liczb i `none` obok detektora | — |
+| E2E-01 tryb bez modelu | E2E | `mapqa run --dataset signs` (bez `--model`) | raport, CSV, lejek z `skipped_no_model`, „Odczyt modelem nie był uruchomiony”, 0 żądań, kod 0 | `--no-model` daje bajtowo ten sam `manual_queue.csv` |
+| E2E-02 płatny MVP | E2E `paid` | `mapqa run --model --yes`, 119 wycinków w kolejnych runach na ciepłym cache (≤ 25 nowych obrazów i ≤ 100 zapytań na run) | sekcja „Rozbieżności znak ↔ OSM” z 46 parami; metryki osobno dla liczb i `none` obok detektora | — |
 
 ### Techniczne kryteria akceptacji
 
 - TAC-004-01: Dwa runy na tych samych danych i ciepłym cache dają bajtowo identyczne `manual_queue.csv` i `evaluation.json`.
 - TAC-004-02: Każda pozycja kolejki ma niepusty `powod` po polsku i wszystkie kolumny F6.6.
-- TAC-004-03: `report.md` przechodzi kontrolę linków względnych (każdy `thumbs/...` istnieje).
+- TAC-004-03: `report.md` i `report.html` przechodzą kontrolę linków względnych (każdy `thumbs/...` istnieje); `report.html` nie zawiera `data:image` ani fragmentu base64 dłuższego niż 64 znaki.
 - TAC-004-04: `evaluation.json` waliduje się modelem Pydantic; każda metryka ma `numerator` i `denominator`.
 - TAC-004-05: Żadna sekwencja nie występuje jednocześnie w `calibration` i `test` (test na danych kursu).
 - TAC-004-06: `reports/` jest w `.gitignore` (`git check-ignore reports/map-qa/x/report.md` zwraca 0).
+- TAC-004-07: Żaden moduł poza `evaluation` nie importuje `evaluation.labels` ani nie otwiera `reference_labels.csv` / `signs/labels.csv` (test importów i ścieżek w `tests/unit/test_architecture.py`).
+- TAC-004-08: Run z plikiem wejściowym zmienionym w trakcie kończy się kodem 4, a `run.json` zawiera hashe przed i po.

@@ -20,8 +20,8 @@ Nie obejmuje: łączenia zdjęć z drogami (ADR-002), modeli (ADR-003), raportu 
 | Biblioteka / usługa | Context7 ID albo dokumentacja | Zastosowanie |
 |---|---|---|
 | Databricks SQL Statement Execution API 2.0 | `/websites/databricks_api`; samouczek https://docs.databricks.com/aws/en/dev-tools/sql-execution-tutorial | `POST /api/2.0/sql/statements`, `GET .../{statement_id}`, `GET .../result/chunks/{chunk_index}` |
-| Databricks CLI (wersja sprawdzona w danych kursu: 1.23.0) | `/databricks/cli` | `databricks api post /api/2.0/sql/statements --json ...` |
-| GeoPandas 1.2.0 | `/geopandas/geopandas` | `read_parquet` (GeoParquet), `GeoSeries.from_wkb`, `to_crs` |
+| Databricks CLI (w danych kursu 1.23.0; na VM-ce zainstalowana i sprawdzona 1.26.0, 2026-11-12) | `/databricks/cli` | `databricks api post /api/2.0/sql/statements --json ...` |
+| DuckDB 1.5.6 + `spatial` | `/websites/duckdb_current` | `read_parquet` (GeoParquet), `read_csv`, `DESCRIBE`, `ST_GeomFromHEXWKB`, `ST_Intersects`, `ST_MakeEnvelope` (silnik — ADR-000 D2) |
 | httpx 0.28.1 | https://www.python-httpx.org/ | Klient REST |
 | Pydantic 2.14.2 | https://docs.pydantic.dev/latest/ | Modele konfiguracji |
 | Dane kursu | `course-materials/exercise-data/map-qa/README.md`, `DATABRICKS.md`, `sources.json` | Nazwy plików, liczności, kodowanie geometrii |
@@ -33,6 +33,11 @@ Fakty zweryfikowane 2026-11-03 i użyte w decyzjach:
 - Kolejne części: `result.next_chunk_index` i `result.next_chunk_internal_link` (ścieżka zaczyna się od `/`).
 - Parametry nazwane `:name` z listą `parameters` (`name`, `value`, `type`; domyślnie `STRING`).
 - Tabele `workspace.map_qa.*` przechowują geometrię jako **BINARY WKB** bez SRID (`sources.json` → `databricks.geometry_encoding`, `DATABRICKS.md`).
+
+Fakty zweryfikowane 2026-11-12 (`reports/map-qa/profile.md`):
+- **Databricks dostępny:** CLI 1.26.0, `databricks current-user me` z tokenem kursowym działa, a `query_databricks.py` zwrócił liczności 5 tabel zgodne z plikami (99 768 / 85 405 / 561 / 561 / 1730). Odczyt wykonał użytkownik we własnym oknie PowerShell. Zapytania przestrzenne `ST_*`, limit `INLINE` dla pełnych dróg i `hex(geometry)` nadal czekają na nagrania DB-01/DB-02.
+- **Rzeczywisty schemat plików (`DESCRIBE`):** `osm_roads` 26 kolumn (`tags` to JSON w VARCHAR; `maxspeed`, `lanes` itd. to VARCHAR; geometria `GEOMETRY('EPSG:4326')`). `overture_segments` 14 kolumn (geometria `GEOMETRY('OGC:CRS84')`; `version` to INTEGER, czyli wersja obiektu, a nie wydanie; dodatkowo `subclass`, `name`, `connectors`, `road_flags`, `access_restrictions`, `bbox`). `photos.csv` 21 kolumn (`captured_at` TIMESTAMPTZ). `photo_road_links.csv` 11 kolumn.
+- **Wartości `candidate_flags`** (separator `;`): `ambiguous_candidates`, `camera_against_way_direction`, `panorama_heading_ambiguous`, `poor_heading_alignment`, `boundary_crossing`, `missing_heading`, `service_way`, `no_osm_within_25m`, `overture_spatial_only`.
 
 ---
 
@@ -63,10 +68,10 @@ Rejestr `sources.registry` mapuje `type` → klasa adaptera. Nowy typ (PostGIS, 
 
 ### 3.3 Adapter `files` [MVP]
 
-- Czyta z katalogu `path` pliki o nazwach z danych kursu: `osm_roads.parquet`, `overture_segments.parquet` (GeoPandas `read_parquet`), `photos.csv`, `photo_road_links.csv`, `reference_labels.csv`, `traffic_signs.geojson`, oraz zestaw `signs/`: `signs.csv`, `labels.csv`, `nearest_osm.csv`, obrazy `crops/`, `photos/`.
-- Pliki otwierane wyłącznie do odczytu; adapter nie tworzy plików w `path` (F2.2).
-- Filtr bbox po wczytaniu: drogi — zachowane całe geometrie przecinające bbox (`intersects` z prostokątem w EPSG:4326, osie lon/lat); zdjęcia i znaki — punkt w bbox (granice włącznie). Zestaw `signs` jest filtrowany tylko przy jawnym `--bbox` (ADR-000 D10-I2); 24 ze 119 wycinków leży poza bbox Krakowa (pole `area`). Rekordy poza bbox trafiają do profilu jako `outside_bbox` (liczba, bez listy przy > 100).
-- CRS: OSM ma EPSG:4326, Overture OGC:CRS84. Oba mają kolejność lon/lat; adapter ustawia CRS wyniku na EPSG:4326 bez transformacji współrzędnych (CRS84 i 4326 różnią się tylko deklarowaną kolejnością osi).
+- Czyta z katalogu `path` pliki o nazwach z danych kursu: `osm_roads.parquet`, `overture_segments.parquet` (DuckDB `read_parquet`, widoki o stałych nazwach), `photos.csv`, `photo_road_links.csv`, `traffic_signs.geojson`, oraz zestaw `signs/`: `signs.csv`, `nearest_osm.csv`, obrazy `crops/`, `photos/`. Adapter **nie** czyta etykiet referencyjnych (`reference_labels.csv`, `signs/labels.csv`) — czyta je wyłącznie moduł `evaluation` (ADR-004 §3.10).
+- Pliki otwierane wyłącznie do odczytu; adapter nie tworzy plików w `path` (F2.2). Adapter zwraca listę wszystkich przeczytanych plików (dane i obrazy) do manifestu wejść; pipeline liczy ich `sha256` przed i po runie (ADR-000 §6, kod 4).
+- Filtr bbox w SQL DuckDB przy odczycie: drogi — zachowane całe geometrie przecinające bbox (`ST_Intersects(geometry, ST_MakeEnvelope(:minx, :miny, :maxx, :maxy))` w EPSG:4326, osie lon/lat, wartości jako parametry); zdjęcia i znaki — punkt w bbox (granice włącznie). Zestaw `signs` jest filtrowany tylko przy jawnym `--bbox` (ADR-000 D10-I2); 24 ze 119 wycinków leży poza bbox Krakowa (pole `area`). Rekordy poza bbox trafiają do profilu jako `outside_bbox` (liczba, bez listy przy > 100).
+- CRS: OSM ma EPSG:4326, Overture OGC:CRS84. Oba mają kolejność lon/lat; adapter traktuje oba jako EPSG:4326 (lon, lat) bez transformacji współrzędnych (CRS84 i 4326 różnią się tylko deklarowaną kolejnością osi). Każda późniejsza transformacja używa `always_xy := true` (ADR-002 §3.1).
 - Zdjęcia: plik obrazu = `photos_dir/filename` (dla `photos.csv`: katalog `offline/` albo `data/photos/` z `download_photos.py`; dla `signs`: `signs/crops/` i `signs/photos/`). Weryfikacja `sha256` pliku z manifestem (`sha256` dla pliku pochodnego, `crop_sha256` dla wycinka). Brak pliku → `missing_file`; inny hash → `hash_mismatch`. Rekord pozostaje w `photos` z polem `image_status`, ale nie trafia do kaskady.
 
 ### 3.4 Adapter `databricks`, dostęp `rest` [P1]
@@ -77,7 +82,7 @@ Przebieg jednego zapytania:
 3. `SUCCEEDED`: odczyt `result.data_array`; dopóki jest `next_chunk_internal_link`, `GET` tej ścieżki (doklejonej do hosta bez podwójnego `/`). Suma wierszy musi równać się `manifest.total_row_count`; inaczej `ContractViolation`.
 4. `FAILED`: wyjątek `QueryFailed` z `error_code` i `message` (bez treści zapytania z parametrami); **nigdy** pusty wynik. `CANCELED`/`CLOSED` bez danych: `QueryFailed`.
 5. HTTP 401/403 → `AuthFailed`; HTTP 429/5xx/timeout połączenia **przy wysyłaniu** → `SourceUnavailable` bez ponowienia (zapytanie mogło wystartować). Odpytywanie `GET` statusu może być powtórzone przy błędzie sieci do 3 razy, bo nie uruchamia zapytania ponownie.
-6. Konwersja: kolumny według `type_name` (`LONG`/`INT` → Int64, `DOUBLE`/`FLOAT` → float, `BOOLEAN`, `TIMESTAMP` → datetime UTC, `STRING`); geometria pobierana w SQL jako `hex(geometry)` i dekodowana w Pythonie z WKB; struktury/listy Overture pobierane jako `to_json(kolumna)` i parsowane do tej samej postaci co w GeoParquet.
+6. Konwersja: kolumny według `type_name` (`LONG`/`INT` → Int64, `DOUBLE`/`FLOAT` → float, `BOOLEAN`, `TIMESTAMP` → datetime UTC, `STRING`); geometria pobierana w SQL jako `hex(geometry)` i dekodowana w DuckDB (`ST_GeomFromHEXWKB`; nazwę funkcji potwierdza test na DuckDB 1.5.6) przy wstawianiu wierszy do tabeli w połączeniu DuckDB; struktury/listy Overture pobierane jako `to_json(kolumna)` i parsowane do tej samej postaci co w GeoParquet.
 
 **Filtr bbox w SQL (F8.5):** drogi przez `ST_Intersects(ST_GeomFromWKB(geometry, 4326), ST_GeomFromText(<prostokąt z :minx :miny :maxx :maxy>, 4326))` — zwraca całe ways przecinające bbox; zdjęcia przez `longitude BETWEEN :minx AND :maxx AND latitude BETWEEN :miny AND :maxy`. Wartości bbox wyłącznie jako parametry nazwane, nigdy przez sklejanie stringów. Dokładna składnia funkcji `ST_*` w Databricks SQL jest weryfikowana nagraniem (§8, scenariusz DB-01) przed implementacją.
 
@@ -93,6 +98,15 @@ To samo zapytanie co §3.4 wysłane przez `subprocess` z listą argumentów (bez
 - Globalny filtr redakcji (`logging.Filter` + funkcja `redact()` używana w komunikatach błędów i przy zapisie nagrań) zastępuje wartości wszystkich zmiennych z `*_env` i `OPENROUTER_API_KEY` ciągiem `***`.
 - `SourceDescriptor` zawiera host bez ścieżek i parametrów, nazwy zmiennych, schemat, tabele — bez wartości sekretów.
 
+### 3.7 Kontrakt schematu z rzeczywistych danych (pierwszy krok implementacji)
+
+Przyjęte za wersją referencyjną prowadzącego (ADR-001 §3.1, ADR-002 §3.4):
+1. **`schema_expected.json`:** pierwszy test integracyjny wykonuje `DESCRIBE` (DuckDB) na `osm_roads.parquet`, `overture_segments.parquet`, `photos.csv`, `photo_road_links.csv`, `signs/signs.csv` i `signs/nearest_osm.csv`. Wynik pierwszego **rzeczywistego** `DESCRIBE` (nazwy kolumn, typy, zagnieżdżone pola struktur Overture) zapisujemy w `app/tests/fixtures/schema_expected.json` z datą i `sha256` pliku źródłowego; listy nie przepisujemy z dokumentacji ani z §4. Pierwszy rzeczywisty `DESCRIBE` wykonano przy profilu z 2026-11-12 (§2); test kontraktu generuje plik ponownie tym samym zapytaniem i porównuje go z profilem. Każdy kolejny run testów porównuje `DESCRIBE` z plikiem; rozbieżność = `ContractViolation` (kod 1) z nazwą tabeli i kolumny. Kolumny wymagane w §4, których nie ma w `schema_expected.json`, wymagają aktualizacji tego ADR przed implementacją (nie zgadujemy nazw).
+2. **`SELECT DISTINCT` na wartościach słownikowych:** test kontraktu zapisuje w `schema_expected.json` (sekcja `distinct_values`) pełną listę:
+   - flag z `photo_road_links.candidate_flags` i `signs/nearest_osm.csv` `match_flags` po rozbiciu separatorem (potwierdza separator i pisownię flag używanych w ADR-002 §3.3);
+   - wartości `road_surface[].value` z `overture_segments.parquet` (po `unnest`; potwierdza mapowanie nawierzchni ADR-002 §3.5).
+   Nowa wartość spoza zapisanej listy = test czerwony z listą różnic; flaga trafia do raportu bez zmian, wartość nawierzchni do `unknown_value`, a ADR-002 jest aktualizowany przed zmianą reguł.
+
 ---
 
 ## 4. Struktury danych — kontrakt `DataBundle`
@@ -102,14 +116,19 @@ Wszystkie geometrie EPSG:4326 (lon/lat). Każde źródło zwraca te same kolumny
 | Zbiór | Klucz | Wymagane kolumny (typ logiczny) | Uwagi |
 |---|---|---|---|
 | `osm_roads` | `osm_id` (Int64) | `highway` (str), `maxspeed`, `surface`, `lit` (str \| null), `tags` (mapa str→str), `node_ids` (lista Int64), `geometry` (LineString) | `tags` zawiera surowe `maxspeed:*`; liczności: 99 768 |
-| `overture_segments` | `id` (str, GERS) | `class` (str), `speed_limits` (lista struktur: `max_speed` {`value`, `unit`}, `min_speed`, `when`, `between`, `is_max_speed_variable`), `road_surface` (lista {`value`, `between`}), `sources` (lista {`dataset`, `record_id`, `between`, ...}), `geometry` (LineString), `version`/wydanie (str) | Dokładne pola zagnieżdżone potwierdza test kontraktu na GeoParquet; liczności: 85 405 |
+| `overture_segments` | `id` (str, GERS) | `class` (str), `speed_limits` (lista struktur: `max_speed` {`value`, `unit`}, `min_speed`, `when`, `between`, `is_max_speed_variable`), `road_surface` (lista {`value`, `between`}), `sources` (lista {`dataset`, `record_id`, `between`, ...}), `level_rules` (lista \| null; flaga `grade_separated`, ADR-002 §3.3), `geometry` (LineString), `version` (Int, wersja obiektu GERS) | Wydanie Overture (`2026-10-21.0`) pochodzi z `sources.json`, nie z kolumny `version`. Pola zagnieżdżone potwierdzone `DESCRIBE` (§2); liczności: 85 405 |
 | `photos` | `photo_id` (str) | `filename`, `source`, `source_url`, `longitude`, `latitude` (float), `heading` (float \| **null**), `captured_at` (datetime UTC), `sequence` (str), `license`, `author`, `sha256`, `is_panorama` (bool), `image_path` (ścieżka \| null), `image_status` (`ok`, `missing_file`, `hash_mismatch`) | `heading = 0.0` ≠ null (F2.4); liczności: 561 |
 | `photo_road_links` | `photo_id` | `osm_way_id` (Int64 \| null), `overture_id` (str \| null), `distance_m`, `way_bearing`, `bearing_diff`, `directed_bearing_diff` (float \| null), `osm_candidate_count` (Int64), `match_method` (str), `candidate_flags` (zbiór str) | Punkt odniesienia dla F3.5; 561 |
-| `traffic_signs` | `id` | `object_value` (str), `first_seen_at`, `last_seen_at`, `image_ids` (lista str), `geometry` (Point) | 1730 |
-| `signs` [MVP, tylko `files`] | `photo_id` | jak `photos` + `crop_sha256`, `crop_path`, `mapillary_value` (str), `area` (str) | 119 |
-| `sign_labels` [MVP] | `photo_id` | `sign_value` (str: liczba, `none`, `unreadable`), `status` (`certain`/`uncertain`), `negative_type` | 119 (115 `certain`) |
+| `traffic_signs` | `id` | `object_value` (str), `first_seen_at`, `last_seen_at`, `image_ids` (lista str), `geometry` (Point) | 1730. W `traffic_signs.geojson` czytanym przez `ST_Read` kolumna geometrii nazywa się `geom`; adapter zmienia nazwę na `geometry` |
+| `signs` [MVP, tylko `files`] | `photo_id` | jak `photos` + `crop_sha256`, `crop_path`, `mapillary_value` (str), `area` (str) | 119. **Mapowanie nazw z `signs/signs.csv`:** `compass_angle` → `heading`, `creator` → `author`. Plik nie ma `filename` ani `is_panorama` (adapter: ścieżka z `photo_id`, `is_panorama = false`) |
 | `sign_nearest_osm` [MVP] | `photo_id` | `osm_way_id`, `distance_m`, `heading_diff_deg`, `highway`, `maxspeed`, `maxspeed_forward`, `maxspeed_backward`, `maxspeed_conditional`, `oneway`, `candidate_count`, `match_flags` (zbiór str), `osm_timestamp` | Zastępuje F3 w MVP |
-| `reference_labels` | (`photo_id`, `question`) | `label`, `status`, `method`, `reviewer`, `reviewed_at` | Ewaluacja §7 |
+
+Etykiety referencyjne **nie należą** do `DataBundle` (izolacja etykiet, ADR-004 §3.10). Czyta je wyłącznie `evaluation.labels` z katalogu danych kursu (`labels_path`, domyślnie `course-materials/exercise-data/map-qa`), niezależnie od wybranego źródła:
+
+| Zbiór etykiet | Plik | Klucz | Kolumny | Uwagi |
+|---|---|---|---|---|
+| `sign_labels` [MVP] | `signs/labels.csv` | `photo_id` | `sign_value` (str: liczba, `none`, `unreadable`), `status` (`certain`/`uncertain`), `negative_type` | 119 (115 `certain`) |
+| `reference_labels` | `reference_labels.csv` | (`photo_id`, `question`) | `label`, `status`, `method`, `reviewer`, `reviewed_at` | Ewaluacja §7 |
 
 Puste pola CSV są wczytywane jako null (nie jako `""` ani 0). Kolumna `heading` jest float z null; test kontraktu sprawdza, że żadna wartość null nie zamienia się w 0.
 
@@ -135,13 +154,13 @@ Referencyjne liczności (README danych, PRD kryterium 17): `osm_roads` 99 768, `
 ### D-001-1. Pliki jako źródło domyślne i referencyjne
 **Status:** Accepted
 **Data:** 2026-11-03
-**Kontekst:** Zestaw `signs/` istnieje tylko lokalnie; Databricks wymaga tokenu z czatu i sieci. MVP ma działać offline.
+**Kontekst:** Zestaw `signs/` istnieje tylko lokalnie; Databricks wymaga tokenu z czatu i sieci. MVP ma działać offline. Aktualizacja 2026-11-12: dostęp do Databricks działa i liczności są zgodne z plikami. Decyzja pozostaje bez zmian, bo token istnieje tylko w sesji użytkownika, a `signs/` nadal nie ma w chmurze.
 **Decyzja:** Wbudowane źródło `files` jest domyślne; wyniki `files` są wzorcem w testach zgodności `files` ↔ `databricks` (F8.10).
 **Odrzucone alternatywy:**
 - Databricks jako domyślne: blokuje pracę bez tokenu i testy w CI.
 **Konsekwencje:**
 - (+) MVP i testy działają bez chmury.
-- (-) Filtr bbox po stronie klienta dla plików (pełny odczyt ~24 MB).
+- (-) Filtr bbox dla plików wykonuje lokalny DuckDB przy odczycie (kolumnowo, bez ładowania całych plików do Pythona).
 **Warunek rewizji:** Gdy pliki lokalne przestaną być aktualnym snapshotem (nowe wydanie Overture/OSM tylko w Databricks).
 
 ### D-001-2. INLINE + JSON_ARRAY zamiast EXTERNAL_LINKS + ARROW_STREAM
@@ -160,7 +179,7 @@ Referencyjne liczności (README danych, PRD kryterium 17): `osm_roads` 99 768, `
 **Status:** Accepted
 **Data:** 2026-11-03
 **Kontekst:** Tabele mają geometrię BINARY WKB; reprezentacja BINARY w JSON_ARRAY nie jest opisana w przeczytanej dokumentacji.
-**Decyzja:** Zapytanie zwraca `hex(geometry)` (string), Python dekoduje WKB i ustawia EPSG:4326. Listy/struktury Overture i mapy tagów jako `to_json(...)`.
+**Decyzja:** Zapytanie zwraca `hex(geometry)` (string), DuckDB dekoduje WKB (`ST_GeomFromHEXWKB`) i geometria jest traktowana jako EPSG:4326 (lon, lat). Listy/struktury Overture i mapy tagów jako `to_json(...)`.
 **Odrzucone alternatywy:**
 - `ST_AsText` (WKT): większy rozmiar i utrata precyzji przy formatowaniu liczb.
 - Surowa kolumna BINARY: niepewne kodowanie (base64?) bez nagrania.
@@ -264,7 +283,7 @@ sequenceDiagram
     A->>D: GET next_chunk_internal_link
     D-->>A: 200 data_array, next link albo brak
   end
-  A->>A: suma wierszy == total_row_count, dekodowanie WKB
+  A->>A: suma wierszy == total_row_count, wstawienie do DuckDB, ST_GeomFromHEXWKB
 ```
 
 ### Sekwencja: błędy Databricks
@@ -304,6 +323,8 @@ Nagrania Databricks (`tests/fixtures/captures/databricks/`) powstają z prawdziw
 | FIL-04 zły hash | Unit | plik zmieniony o 1 bajt | `hash_mismatch` | wielkość liter hex |
 | FIL-05 drogi przecinające bbox | Unit | syntetyczna linia częściowo w bbox | zachowana cała geometria | linia styczna do krawędzi bbox |
 | FIL-06 read-only | Unit | uruchomienie na kopii danych | brak nowych/zmienionych plików w `path` (porównanie mtime + hash) | — |
+| SCH-01 kontrakt schematu | Integration | prawdziwe pliki kursu | `DESCRIBE` = `schema_expected.json` (zapisany z pierwszego rzeczywistego `DESCRIBE`) | brak kolumny albo zmiana typu → `ContractViolation`, kod 1 |
+| SCH-02 wartości słownikowe | Integration | `candidate_flags`, `match_flags`, `road_surface[].value` | `SELECT DISTINCT` = `distinct_values` z `schema_expected.json` | nowa flaga / wartość → test czerwony z listą różnic |
 | CON-01 kontrakt | Contract | `files` i `databricks` (z nagrań) | te same kolumny, typy, CRS EPSG:4326, null ≠ 0 | dodatkowe kolumny tylko z `src_` |
 | DB-01 składnia SQL | Capture | jedno zapytanie z `ST_Intersects` na małym bbox | stan SUCCEEDED, nagranie zapisane | — |
 | DB-02 pełny bbox | Capture + E2E | `osm_roads` pełny bbox | wszystkie chunki, 99 768 wierszy | błąd limitu 25 MiB → podział na pasy |
@@ -322,4 +343,5 @@ Nagrania Databricks (`tests/fixtures/captures/databricks/`) powstają z prawdziw
 - TAC-001-03: W żadnym teście z fałszywym tokenem wzorzec tokenu nie występuje w wyjątkach, logach, `run.json`, raportach ani nagraniach.
 - TAC-001-04: Adapter `databricks` wykonuje dokładnie 1 `POST /api/2.0/sql/statements` na zbiór w każdym scenariuszu błędu (licznik tras respx).
 - TAC-001-05: Bbox trafia do SQL wyłącznie przez `parameters`; test sprawdza, że tekst `statement` nie zawiera wartości liczbowych bbox.
+- TAC-001-07: `app/tests/fixtures/schema_expected.json` istnieje, ma datę i `sha256` plików źródłowych oraz sekcję `distinct_values`; powstał z rzeczywistego `DESCRIBE`, nie z dokumentacji.
 - TAC-001-06: `--no-model` na `files` i `databricks` z tymi samymi danymi daje identyczną listę id kandydatów i liczności (pomijając `SourceDescriptor`) [P1].
