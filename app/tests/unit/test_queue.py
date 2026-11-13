@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from mapqa.candidates.queue import COLUMNS, QueueItem, build_queue
+from mapqa.candidates.queue import COLUMNS, QueueItem, build_queue, queue_id_collisions
 from mapqa.candidates.rules import CandidateInput, build_candidates
 from mapqa.contract.models import AttributeValue, CascadeResult, ModelAttempt, PhotoRoadLink
 from mapqa.normalize.maxspeed import normalize_maxspeed
@@ -98,6 +98,35 @@ def test_item_id_formula() -> None:
     [item] = build_queue(build_candidates([inp]), [inp])
     expected = hashlib.sha256(f"{'a' * 64}|speed_limit|7".encode()).hexdigest()[:16]
     assert item.item_id == expected and len(expected) == 16
+
+
+def test_no_collision_ids_unchanged_and_no_collisions_reported() -> None:
+    a = make_input("40", photo_id="a", sha="1")
+    b = make_input("40", photo_id="b", sha="2")
+    q = build_queue(build_candidates([a, b]), [a, b])
+    expected = {
+        hashlib.sha256(f"{sha * 64}|speed_limit|7".encode()).hexdigest()[:16] for sha in ("1", "2")
+    }
+    assert {i.item_id for i in q} == expected
+    assert queue_id_collisions(q) == []
+
+
+def test_same_sha_same_road_gets_distinct_deterministic_ids() -> None:
+    a = make_input("40", photo_id="p1", sha="a")
+    b = make_input("40", photo_id="p2", sha="a")
+    q1 = build_queue(build_candidates([a, b]), [a, b])
+    ids = [i.item_id for i in q1]
+    assert len(ids) == 2 and len(set(ids)) == 2
+    expected = {
+        hashlib.sha256(f"{'a' * 64}|speed_limit|7|{pid}".encode()).hexdigest()[:16] for pid in ("p1", "p2")
+    }
+    assert set(ids) == expected
+    rev = [b, a]
+    q2 = build_queue(build_candidates(rev), rev)
+    assert ids == [i.item_id for i in q2]
+    assert queue_id_collisions(q1) == []
+    forced = [replace(i, item_id="dup") for i in q1]
+    assert queue_id_collisions(forced) == ["p1", "p2"]
 
 
 @pytest.mark.parametrize("status", ["abstain", "model_unavailable", "budget_exceeded", "image_out_of_bounds"])
