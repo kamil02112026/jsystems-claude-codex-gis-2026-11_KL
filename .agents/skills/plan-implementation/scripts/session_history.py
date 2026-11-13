@@ -112,7 +112,7 @@ def digest(path: Path, n: int, all_text: bool) -> None:
                 print(f"[{ts}] CALL: {short(args, 200)}")
         elif d.get("type") == "response_item" and p.get("type") in ("function_call_output", "custom_tool_call_output"):
             out = str(p.get("output", ""))
-            if re.search(r'exit_code\\*"?:\s*[1-9]|Exit code: [1-9]|rejected by (the )?user|denied', out):
+            if re.search(r'exit_code\\*"?:\s*[1-9]|Exit code: [1-9]|rejected by (the )?user', out):
                 errors += 1
                 print(f"[{ts}] TOOL_ERROR: {short(out, 300)}")
     if writes:
