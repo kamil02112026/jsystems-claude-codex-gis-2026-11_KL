@@ -1,0 +1,110 @@
+{
+  "results": [
+    {
+      "id": "220102657",
+      "title": "Map Data Jobs - kurs (dane syntetyczne)",
+      "parentId": null,
+      "spaceId": "17956866",
+      "status": "current",
+      "version": {
+        "number": 1
+      },
+      "_links": {
+        "webui": "/spaces/~course-user/pages/220102657/Map+Data+Jobs+-+kurs+dane+syntetyczne",
+        "tinyui": "/x/AYAeDQ",
+        "base": "https://course-site.atlassian.net/wiki"
+      },
+      "body": {
+        "storage": {
+          "representation": "storage",
+          "value": "<p>Strona główna materiałów do ćwiczeń kursowych. Wszystkie dane są syntetyczne; ścieżki, klastry i nazwy notebooków nie istnieją w rzeczywistym środowisku.</p><p>Zlecenia przetwarzania danych map zakładamy w projekcie Jira TEST (etykieta <code>course-seed</code>). Poniższe strony opisują konwencje, runbook, kalendarz wydań i migrację FME do SQL.</p><ul><li>Konwencje parametrów zleceń</li><li>Runbook: kroki Databricks ingest -&gt; publish</li><li>Kalendarz wydań Q4 2026</li><li>WB-ROADS-07: migracja FME -&gt; SQL</li></ul><p>Właściciel: zespół Map Data (alias). Ostatni przegląd: 2026-11-12.</p>"
+        }
+      }
+    },
+    {
+      "id": "220135425",
+      "title": "Konwencje parametrów zleceń",
+      "parentId": "220102657",
+      "spaceId": "17956866",
+      "status": "current",
+      "version": {
+        "number": 1
+      },
+      "_links": {
+        "webui": "/spaces/~course-user/pages/220135425/Konwencje+parametr+w+zlece",
+        "tinyui": "/x/AQAfDQ",
+        "base": "https://course-site.atlassian.net/wiki"
+      },
+      "body": {
+        "storage": {
+          "representation": "storage",
+          "value": "<p>Ta strona jest źródłem prawdy przy normalizacji parametrów wpisywanych ręcznie w zleceniach Jira (dane syntetyczne). Gdy zlecenie odbiega od tych zasad, obowiązuje zapis z tej strony, chyba że komentarz zamawiającego wprost go zmienia dla danego zlecenia.</p><h2>Kody regionów (ISO 3166-2)</h2><table><thead><tr><th>Kod kanoniczny</th><th>Region</th><th>Błędne zapisy spotykane w zleceniach</th></tr></thead><tbody><tr><td>PL-14</td><td>mazowieckie</td><td>PL-MZ, MAZ, mazowsze</td></tr><tr><td>PL-12</td><td>małopolskie</td><td>PL-MP, MALOP</td></tr><tr><td>PL-22</td><td>pomorskie</td><td>PL-PM, pomorze</td></tr><tr><td>PL-30</td><td>wielkopolskie</td><td>PL-WP, WLKP</td></tr><tr><td>DE-BY</td><td>Bawaria</td><td>BY, Bayern</td></tr><tr><td>DE-BE</td><td>Berlin</td><td>BE, Berlin-DE</td></tr></tbody></table><p>Nazwa miejscowości (<code>area_name</code>) jest etykietą zamówienia i nie wyznacza regionu ani zakresu. Dwie miejscowości mogą mieć tę samą nazwę w różnych regionach (przykład: Nowa Wieś w PL-14 i w PL-30), patrz zlecenia <a href=\"https://course-site.atlassian.net/browse/TEST-1\">TEST-1</a> i TEST-6.</p><h2>Format wydania danych</h2><p>Wydanie miesięczne zapisujemy jako <code>YYYY.MM</code>, na przykład <code>2026.11</code>. Niedozwolone zapisy: <code>26.11</code>, <code>2026-11</code>, <code>nov 2026</code>, <code>2026.1</code>, <code>2026-11-W46</code>. Tygodniowy zrzut wejściowy należy do wydania miesięcznego i nie jest osobnym wydaniem.</p><h2>Zakres przestrzenny (bbox)</h2><ul><li>Układ EPSG:4326, kolejność osi: <code>min_lon, min_lat, max_lon, max_lat</code> (najpierw długość, potem szerokość).</li><li>Zapis w tabelkach analityków bywa odwrócony (szerokość pierwsza); przykład do sprawdzenia: <a href=\"https://course-site.atlassian.net/browse/TEST-7\">TEST-7</a> oraz podzadanie TEST-33.</li><li><code>bbox: null</code> oznacza cały region i jest poprawne tylko wtedy, gdy zlecenie wprost zamawia cały region.</li></ul><h2>Wzorzec ścieżki wyjściowej</h2><pre><code class=\"language-text\">dbfs:/map-jobs/&lt;numer-zamowienia-malymi&gt;/&lt;segment&gt;/\nprzyklady:\ndbfs:/map-jobs/osm-460/2026-11/\ndbfs:/map-jobs/sl-461/final/\ndbfs:/map-jobs/geo-464/review/\ndbfs:/map-jobs/poi-462/delivery/</code></pre><p>Segment to <code>YYYY-MM</code> dla dostaw cyklicznych albo <code>preview</code>, <code>final</code>, <code>review</code>, <code>delivery</code>. Katalogi <code>dbfs:/scratch/</code> nie są dozwolonym celem dostawy. Gdy zamawiający nie podał zatwierdzonej ścieżki, zlecenie nie jest wykonywalne.</p><h2>Dozwolone kroki</h2><table><thead><tr><th>Krok</th><th>Znaczenie</th><th>Uwagi</th></tr></thead><tbody><tr><td>ingest</td><td>wczytanie i podział wejścia na chunki</td><td>zawsze pierwszy, jeśli jest w zleceniu</td></tr><tr><td>conflation</td><td>łączenie danych i węzłów</td><td>po ingest</td></tr><tr><td>validation</td><td>kontrola geometrii, schematu i liczności</td><td>przed export</td></tr><tr><td>export</td><td>zapis w żądanym formacie</td><td>parquet, delta lub geojson</td></tr><tr><td>publish</td><td>publikacja agregatów lub warstw</td><td>tylko jeśli zamówione</td></tr></tbody></table><p>Kolejność kroków jest stała: ingest, conflation, validation, export, publish. W konfiguracji podajemy tylko kroki do wykonania, od <code>start_step</code>.</p><h2>Dozwolone formaty wyjścia</h2><p><code>parquet</code>, <code>delta</code>, <code>geojson</code>. Literówki (<code>parqet</code>, <code>geojsn</code>) poprawiamy do wartości z listy.</p>"
+        }
+      }
+    },
+    {
+      "id": "220168193",
+      "title": "Runbook: kroki Databricks ingest -> publish",
+      "parentId": "220102657",
+      "spaceId": "17956866",
+      "status": "current",
+      "version": {
+        "number": 1
+      },
+      "_links": {
+        "webui": "/spaces/~course-user/pages/220168193/Runbook+kroki+Databricks+ingest+-+publish",
+        "tinyui": "/x/AYAfDQ",
+        "base": "https://course-site.atlassian.net/wiki"
+      },
+      "body": {
+        "storage": {
+          "representation": "storage",
+          "value": "<p>Runbook dla dyżurnego (dane i nazwy syntetyczne). Każdy krok to osobny job Databricks uruchamiany z parametrami wygenerowanymi z konfiguracji YAML zlecenia.</p><h2>Joby, notebooki i klastry</h2><table><thead><tr><th>Krok</th><th>Job</th><th>Notebook</th><th>Cluster</th></tr></thead><tbody><tr><td>ingest</td><td>map-jobs-ingest</td><td>/Repos/map-data/notebooks/01_ingest</td><td>gis-jobs-std-01</td></tr><tr><td>conflation</td><td>map-jobs-conflation</td><td>/Repos/map-data/notebooks/02_conflation</td><td>gis-jobs-std-01</td></tr><tr><td>validation</td><td>map-jobs-validation</td><td>/Repos/map-data/notebooks/03_validation</td><td>gis-jobs-std-01</td></tr><tr><td>export</td><td>map-jobs-export</td><td>/Repos/map-data/notebooks/04_export</td><td>gis-jobs-std-02</td></tr><tr><td>publish</td><td>map-jobs-publish</td><td>/Repos/map-data/notebooks/05_publish</td><td>gis-jobs-std-02</td></tr></tbody></table><h2>Uruchomienie od wybranego kroku</h2><p>Parametr <code>start_step</code> w konfiguracji wskazuje pierwszy krok do wykonania. Restart po awarii: ustaw <code>start_step</code> na krok, który się nie powiódł, nie na ingest, o ile wyniki wcześniejszych kroków są zaakceptowane. Przykład:</p><pre><code class=\"language-yaml\">job_id: E2\nregion: PL-12\nstart_step: validation\nsteps: [validation, export]\noutput_format: delta\noutput_path: dbfs:/map-jobs/osm-460/2026-11/</code></pre><ol><li>Sprawdź w logu runu parametry, które faktycznie zostały przekazane (literówki w nazwach warstw kończą się błędem tabeli, patrz TEST-35).</li><li>Popraw konfigurację i zweryfikuj ją względem strony Konwencje parametrów zleceń.</li><li>Uruchom job dla kroku startowego. Powtórne uruchomienie tego samego wydania zastępuje partycję wydania, nie dopisuje duplikatów.</li><li>Zapisz w zleceniu ID runu, czas startu i końca (UTC) oraz wynik.</li></ol><h2>Typowe awarie</h2><table><thead><tr><th>Objaw</th><th>Przyczyna</th><th>Działanie</th></tr></thead><tbody><tr><td>TABLE_OR_VIEW_NOT_FOUND dla warstwy</td><td>literówka w <code>layers</code></td><td>popraw config, uruchom od kroku, który padł</td></tr><tr><td>ExecutorLostFailure, spot preempted</td><td>zabrany węzeł spot</td><td>ponów run, jeśli parametry poprawne; przykład: <a href=\"https://course-site.atlassian.net/browse/TEST-36\">TEST-36</a></td></tr><tr><td>pusty chunk</td><td>okno bez danych</td><td>raportuj, nie zmieniaj bbox; kontekst w TEST-12</td></tr><tr><td>spadek liczby rekordów po runie</td><td>nadpisana partycja wydania</td><td>zgłoś w codziennej kontroli, sprawdź ostatni run regionu</td></tr></tbody></table><p>Inne zgłoszenie z tą samą klasą błędu: TEST-99 (stary numer z poprzedniej kolejki).</p><h2>Do kogo pisać</h2><table><thead><tr><th>Temat</th><th>Kontakt (alias)</th></tr></thead><tbody><tr><td>Cluster, quota, spot</td><td>Data Platform (Paweł K.)</td></tr><tr><td>Parametry zlecenia, duplikaty</td><td>Map Requests</td></tr><tr><td>Walidacja znaków i geometrii</td><td>Data-QA</td></tr><tr><td>Dyżur i liczniki dashboardu</td><td>Data Ops on-call</td></tr></tbody></table>"
+        }
+      }
+    },
+    {
+      "id": "220200961",
+      "title": "Kalendarz wydań Q4 2026",
+      "parentId": "220102657",
+      "spaceId": "17956866",
+      "status": "current",
+      "version": {
+        "number": 1
+      },
+      "_links": {
+        "webui": "/spaces/~course-user/pages/220200961/Kalendarz+wyda+Q4+2026",
+        "tinyui": "/x/AQAgDQ",
+        "base": "https://course-site.atlassian.net/wiki"
+      },
+      "body": {
+        "storage": {
+          "representation": "storage",
+          "value": "<p>Planowane daty dostaw i wydań danych (syntetyczne). Wersja z 2026-11-05, nie była aktualizowana po korektach zamawiających.</p><h2>Wydania miesięczne</h2><table><thead><tr><th>Wydanie</th><th>Zamrożenie wejścia</th><th>Data wydania</th></tr></thead><tbody><tr><td>2026.10</td><td>2026-10-09</td><td>2026-10-15</td></tr><tr><td>2026.11</td><td>2026-11-09</td><td>2026-11-27</td></tr><tr><td>2026.12</td><td>2026-12-11</td><td>2026-12-15</td></tr></tbody></table><h2>Dostawy w listopadzie 2026</h2><table><thead><tr><th>Zlecenie</th><th>Zakres</th><th>Termin dostawy wg kalendarza</th><th>Jira</th></tr></thead><tbody><tr><td>OSM-460</td><td>Kraków, delta</td><td>2026-11-16</td><td><a href=\"https://course-site.atlassian.net/browse/TEST-2\">TEST-2</a></td></tr><tr><td>GEO-464</td><td>München, paczka do przeglądu</td><td>2026-11-18</td><td>TEST-4</td></tr><tr><td>SL-461</td><td>Nowa Wieś, speed limits, publish</td><td>2026-11-24</td><td>TEST-1</td></tr><tr><td>MIG-463</td><td>Gdańsk, pierwsza dostawa parquet</td><td>2026-11-20</td><td>TEST-3</td></tr><tr><td>DASH-465</td><td>Berlin, agregaty dashboardu</td><td>2026-11-14</td><td>TEST-5</td></tr></tbody></table><p>Uwaga: termin SL-461 w tej tabeli (24 listopada) różni się od terminu w zleceniu Jira, gdzie zamawiający ostatecznie wskazał 19 listopada. Do wyjaśnienia z Map Requests, który termin obowiązuje.</p><h2>Okna serwisowe</h2><ul><li>Środy 06:00-07:00 UTC: przeglądy klastrów gis-jobs-std-01 i gis-jobs-std-02.</li><li>2026-11-25: planowana migracja katalogu dostaw (bez publikacji tego dnia).</li></ul><h2>Święta i dni wolne</h2><p>2026-11-11 (Dzień Niepodległości, PL), 2026-12-24 do 2026-12-26.</p>"
+        }
+      }
+    },
+    {
+      "id": "220233729",
+      "title": "WB-ROADS-07: migracja FME -> SQL",
+      "parentId": "220102657",
+      "spaceId": "17956866",
+      "status": "current",
+      "version": {
+        "number": 1
+      },
+      "_links": {
+        "webui": "/spaces/~course-user/pages/220233729/WB-ROADS-07+migracja+FME+-+SQL",
+        "tinyui": "/x/AYAgDQ",
+        "base": "https://course-site.atlassian.net/wiki"
+      },
+      "body": {
+        "storage": {
+          "representation": "storage",
+          "value": "<p>Workbench FME WB-ROADS-07 produkuje warstwę dróg. Migrujemy go na kroki SQL w Databricks (zamówienie MIG-463, epik <a href=\"https://course-site.atlassian.net/browse/TEST-3\">TEST-3</a>). FME służy tylko do porównania znaczenia transformacji, nie produkuje wyniku docelowego.</p><h2>Transformery i odpowiedniki</h2><table><thead><tr><th>Transformer FME</th><th>Co robi</th><th>Odpowiednik w SQL</th><th>Status</th></tr></thead><tbody><tr><td>FeatureReader (staging_roads)</td><td>wczytanie dróg z wejścia</td><td>FROM staging_roads</td><td>gotowe</td></tr><tr><td>SelectCountryRoads</td><td>filtr regionu, wydania i usuniętych</td><td>WHERE region_code, release_id, is_deleted</td><td>gotowe, patrz TEST-15</td></tr><tr><td>AttributeManager</td><td>zmiana nazw atrybutów</td><td>SELECT ... AS ...</td><td>do sprawdzenia</td></tr><tr><td>GeometryValidator</td><td>kontrola geometrii</td><td>ST_IsValid(geometry)</td><td>otwarte</td></tr><tr><td>Sorter + Counter</td><td>kolejność i licznik</td><td>nie przenosimy, road_id jest stabilny</td><td>decyzja</td></tr><tr><td>FeatureWriter</td><td>zapis wyniku</td><td>krok export (parquet)</td><td>brak ścieżki</td></tr></tbody></table><h2>Fragment SQL (filtr produkcyjny PL-22)</h2><pre><code class=\"language-sql\">SELECT road_id, geometry, speed_limit\nFROM staging_roads\nWHERE region_code = 'PL-22'\n  AND release_id = '2026.11'\n  AND is_deleted = false;</code></pre><p>Nazwa historyczna SelectCountryRoads jest myląca: filtr nie dotyczy całego kraju. Conflation zachowuje <code>road_id</code>.</p><h2>Pytania otwarte</h2><ol><li>Jaka jest zatwierdzona ścieżka dostawy parquet dla Gdańska? Katalog scratch z poprzedniego porównania nie jest dozwolony. Odpowiedź ma przekazać Data Platform.</li><li>Czy GeometryValidator ma odpowiednik w SQL, czy kontrolę przejmuje krok validation (TEST-16)?</li><li>Czy wejście z kroku ingest (TEST-14) jest identyczne z rejestrem wejścia WB-ROADS-07?</li><li>Czy porównanie liczby rekordów i zbiorów <code>road_id</code> z wynikiem FME robimy na całym PL-22, czy na próbce?</li></ol>"
+        }
+      }
+    }
+  ],
+  "_links": {}
+}

@@ -1,0 +1,582 @@
+[
+  {
+    "ref": "E1",
+    "type": "Epic",
+    "parent": null,
+    "summary": "Speed limits refresh - Nowa Wieś / PL-MZ / release 26.11",
+    "description_md": "Zamówienie SL-461, skopiowane z wiadomości do kolejki Map Requests.\n\nPotrzebujemy odświeżenia ograniczeń prędkości na drogach w Nowej Wsi.\nNie pobierajcie całego województwa, zamówienie dotyczy wycinka.\n\n| Parametr z formularza | Wartość |\n| --- | --- |\n| regoin | PL-MZ |\n| area | Nowa Wieś |\n| layers | roads; speed limts |\n| release | 26.11 |\n| start | conflation |\n| format | geojson |\n| output | dbfs:/map-jobs/sl-461/preview/ |\n| potrzebne na | 18/11/2026 |\n| zespół zamawiający | Map Requests |\n\nWsad z listopada jest już przygotowany. Zakres przestrzenny dopisze Analyst\nw podzadaniu do walidacji. @Data-QA proszę sprawdzić znaki przy wlotach.\nNie włączamy POI ani adresów.",
+    "labels": [
+      "job-order",
+      "speed-limits",
+      "sl-461"
+    ],
+    "comments": [
+      {
+        "author_alias": "Requester - Map Requests",
+        "body_md": "2026-11-12 09:10 UTC: PL-MZ to nasz stary skrót Mazowieckiego. W konfiguracji ma być PL-14. Release oznacza listopad 2026, nie rok 2026 i tydzień 11."
+      },
+      {
+        "author_alias": "Analyst",
+        "body_md": "2026-11-12 13:40 UTC: conflation jest gotowe dla wsadu SL-461, rev c. Restart od validation; potem export i publish, dokładnie w tej kolejności. Nie powtarzać conflation."
+      },
+      {
+        "author_alias": "Requester - Map Requests",
+        "body_md": "2026-11-13 08:20 UTC: zmiana odbiorcy. Wynik ma być parquet w dbfs:/map-jobs/sl-461/final/, termin 2026-11-19. To zastępuje format, output i datę z tabeli. Pozostałe parametry bez zmian."
+      }
+    ],
+    "links": [],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "E1-T1",
+    "type": "Task",
+    "parent": "E1",
+    "summary": "SL-461 - validate speed limits against signs",
+    "description_md": "Wejście: gotowy wynik conflation rev c, nie surowy OSM.\nSprawdzić speed_limits razem z roads: jednostki km/h, brak pustych limitów\nna wybranych drogach, zgodność ze znakami. Same zdjęcia nie zmieniają limitu automatycznie.\n\nZakres bbox jest w podzadaniu; obowiązuje jego ostatni uzgodniony komentarz.\nZestaw znaków i wyjątek dla drogi serwisowej opisano w zgłoszeniu\n\"SL-461 - znaki przy wlocie\". Nie było go pod epikiem przy zakładaniu.",
+    "labels": [
+      "processing-step",
+      "validation"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "E1-T2",
+    "type": "Task",
+    "parent": "E1",
+    "summary": "SL-461 - export accepted roads and limits",
+    "description_md": "Export po zamknięciu walidacji. W starym notebooku została komórka:\n\n```yaml\noutput_format: geojson\noutput_path: dbfs:/map-jobs/sl-461/preview/\n```\n\nTo kopia pierwotnego requestu. Przed generowaniem configu sprawdzić aktualne\nkomentarze zamawiającego w zamówieniu nadrzędnym; nie traktować tej komórki\njako akceptacji parametrów dostawy.",
+    "labels": [
+      "processing-step",
+      "export"
+    ],
+    "comments": [],
+    "links": [
+      {
+        "type": "Blocks",
+        "to": "E1-T3"
+      }
+    ],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E1-T3",
+    "type": "Task",
+    "parent": "E1",
+    "summary": "SL-461 - publish po odbiorze eksportu",
+    "description_md": "Odbiorca: Map Requests. Publikacja korzysta z wyniku kroku export.\nSprawdzić, że manifest zawiera roads i speed_limits, bez poi.\nNie publikować, zanim walidacja znaków i eksport nie będą zaakceptowane.\n\nKtoś założył jeszcze request SL-461 przez drugi formularz. Do czasu wyjaśnienia\nzlecić najwyżej jeden run, żeby nie policzyć tej samej dostawy dwa razy.",
+    "labels": [
+      "processing-step",
+      "publish"
+    ],
+    "comments": [],
+    "links": [
+      {
+        "type": "Relates",
+        "to": "E7"
+      }
+    ],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E1-T1-S1",
+    "type": "Subtask",
+    "parent": "E1-T1",
+    "summary": "SL-461 - potwierdzić okno przestrzenne",
+    "description_md": "Przeklejone z roboczej notatki terenowej:\n\n```\narea_name = Nowa Wieś\nbbox = 52.100, 20.780, 52.135, 20.835\n```\n\nW notatce pierwsza była szerokość geograficzna. Potrzebujemy potwierdzenia,\nzanim ktoś użyje tego jako lon/lat w notebooku.",
+    "labels": [
+      "parameter-check",
+      "bbox"
+    ],
+    "comments": [
+      {
+        "author_alias": "Analyst",
+        "body_md": "2026-11-12 15:05 UTC: potwierdzone EPSG:4326. Kolejność w notatce: min_lat, min_lon, max_lat, max_lon. Poprawny bbox do YAML: [20.780, 52.100, 20.835, 52.135]. To Nowa Wieś w PL-14, nie obszar z zamówienia POI-462."
+      }
+    ],
+    "links": [],
+    "seed_status": "Done"
+  },
+  {
+    "ref": "E2",
+    "type": "Epic",
+    "parent": null,
+    "summary": "OSM weekly dump ingest wk46 - Kraków",
+    "description_md": "Zamówienie OSM-460. Jeden standardowy run dla okna Kraków, bez zmian zakresu.\nZrzut tygodniowy przygotowany 2026-11-09 jest wejściem wydania miesięcznego 2026.11.\n\n```yaml\nregion: PL-12\narea_name: Kraków\nbbox: [19.80, 49.95, 20.20, 50.15]\nlayers: [roads, junctions]\ndata_release: '2026.11'\nstart_step: ingest\nsteps: [ingest, validation, export]\noutput_format: delta\noutput_path: dbfs:/map-jobs/osm-460/2026-11/\ndeadline: '2026-11-16'\nrequester_team: Data Ops\n```\n\nChunker ma korzystać z powyższego bbox, nie z granicy administracyjnej miasta.\nPo eksporcie kończymy run; publish nie jest zamówione. Powtórne uruchomienie\ntego samego wydania wymaga zastąpienia partycji, bez dopisywania duplikatów.",
+    "labels": [
+      "job-order",
+      "osm-weekly",
+      "osm-460"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "E2-T1",
+    "type": "Task",
+    "parent": "E2",
+    "summary": "OSM-460 - ingest weekly snapshot",
+    "description_md": "Uruchomić ingest dla dumpu z 2026-11-09 z zamówienia nadrzędnego.\nChunker dzieli wyłącznie okno z epika. Nie zmieniać bbox na cały PL-12.\n\nRun notebooka rozpoczął się 2026-11-12 o 05:15 UTC i skończył o 05:31 UTC.\nTo czasy wykonania, a nie termin dostawy. Counts zapisane w manifeście wejściowym.",
+    "labels": [
+      "processing-step",
+      "ingest"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "Done"
+  },
+  {
+    "ref": "E2-T2",
+    "type": "Task",
+    "parent": "E2",
+    "summary": "OSM-460 - connectivity and schema checks",
+    "description_md": "Sprawdzić roads i junctions: referencje węzłów, puste geometrie, zgodność\nschematu. Materiał kontrolny to ten sam snapshot, który przeszedł ingest.\nNie pobierać w tle nowszego dumpu.\n\n@Data-Ops czekamy na count review. Zamówienie nadal obejmuje start od ingest,\nchociaż ten task ma już przygotowane zapytania do walidacji.",
+    "labels": [
+      "processing-step",
+      "validation"
+    ],
+    "comments": [],
+    "links": [
+      {
+        "type": "Blocks",
+        "to": "E2-T3"
+      }
+    ],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "E2-T3",
+    "type": "Task",
+    "parent": "E2",
+    "summary": "OSM-460 - write delta delivery",
+    "description_md": "Wyjście i data dostawy dokładnie jak w zamówieniu OSM-460.\nSprawdzić możliwość odczytu delta po zapisie oraz obecność dwóch warstw.\nNie tworzyć dodatkowego eksportu GeoJSON, nikt go nie zamawiał.",
+    "labels": [
+      "processing-step",
+      "export"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E3",
+    "type": "Epic",
+    "parent": null,
+    "summary": "WB-ROADS-07 -> SQL / Gdańsk - first delivery",
+    "description_md": "Request MIG-463 od zespołu Data Engineering. Przenosimy FME workbench\nWB-ROADS-07 na kroki SQL wykonywane w Databricks. Wynik ma zachować\nidentyfikatory dróg i znaczenie filtrów, bez dodawania nowego obszaru.\n\nregion PL-22, area Gdańsk. Release: nov 2026. Zakres: cały wskazany region,\nbez dodatkowego bbox. Warstwa roads; format Parqet.\n\nKolejność na pierwszy odbiór: ingest -> conflation -> validation -> export.\nStart od ingest. Termin: 20.11.2026.\n\nDocelowy katalog dostawy do uzupełnienia po uzgodnieniu z Data Platform.\nNie kopiować ścieżki z poprzedniej migracji. Jest zgłoszenie o katalogu\n\"MIG-463 - gdzie odkładać wynik SQL\" poza tym epikiem.",
+    "labels": [
+      "job-order",
+      "fme-migration",
+      "mig-463"
+    ],
+    "comments": [
+      {
+        "author_alias": "Analyst",
+        "body_md": "2026-11-12 11:35 UTC: Parqet w formularzu to literówka, chodzi o parquet. PL-22 to zamówiony region, Gdańsk jest nazwą zamówienia, nie filtrem do granicy miasta. bbox zostaje null."
+      }
+    ],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E3-T1",
+    "type": "Task",
+    "parent": "E3",
+    "summary": "MIG-463 - wejście do replacement notebooka",
+    "description_md": "Ingest dróg z wydania nov 2026, bez dodatkowych warstw. Rejestr wejścia\nma się zgadzać z WB-ROADS-07. Nie uruchamiać FME równolegle jako producenta\nwyniku docelowego; FME służy wyłącznie do porównania znaczenia transformacji.\n\nNie ma jeszcze akceptacji output_path. Próbny run w pamięci to nie dostawa.",
+    "labels": [
+      "processing-step",
+      "ingest"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E3-T2",
+    "type": "Task",
+    "parent": "E3",
+    "summary": "MIG-463 - SQL equivalent of road selector",
+    "description_md": "Węzeł FME \"SelectCountryRoads\" zastępujemy filtrem z poniższego zapytania.\nNazwa historyczna jest myląca; nie filtrujemy całego kraju.\n\n```sql\nSELECT road_id, geometry, speed_limit\nFROM staging_roads\nWHERE region_code = 'PL-22'\n  AND release_id = '2026.11'\n  AND is_deleted = false;\n```\n\nTo jest filtr produkcyjny zamówienia MIG-463, nie przykład z dokumentacji.\nConflation zachowuje road_id. Bez poszerzania do sąsiednich regionów.",
+    "labels": [
+      "processing-step",
+      "conflation"
+    ],
+    "comments": [],
+    "links": [
+      {
+        "type": "Blocks",
+        "to": "E3-T3"
+      }
+    ],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "E3-T3",
+    "type": "Task",
+    "parent": "E3",
+    "summary": "MIG-463 - validation then export",
+    "description_md": "Jeden task koordynuje dwa notebooki, ale w configu mają zostać osobne kroki\nvalidation, następnie export. Sprawdzić liczby rekordów i zbiory road_id\nw porównaniu z transformacją FME na tym samym wejściu.\n\nNie wykonywać eksportu na ścieżkę tymczasową w zastępstwie brakującej\nścieżki dostawy. Blocked on destination confirmation, nie na kodzie SQL.",
+    "labels": [
+      "processing-step",
+      "validation",
+      "export"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E4",
+    "type": "Epic",
+    "parent": null,
+    "summary": "Geometry QA - missing junction nodes DE-BY / München",
+    "description_md": "GEO-464, od Geometry QA. Brakuje węzłów na skrzyżowaniach; w kilku segmentach\ntag highway=motorway wygląda na przeklejony z sąsiedniej jezdni.\nNie poprawiać tagu wyłącznie na podstawie klasy sąsiedniego obiektu.\n\n| Pole | Wartość |\n| --- | --- |\n| region | DE-BY |\n| area_name | München |\n| bbox (z tabelki analityka) | 48.05, 11.45, 48.25, 11.75 |\n| layers | roads + junctions |\n| data release | 2026-11 |\n| start | conflation |\n| steps | conflation, validation, export |\n| output | geojson, dbfs:/map-jobs/geo-464/review/ |\n| deadline | 2026-11-18 |\n\nIngest jest zaakceptowany dla tego wydania. Eksport to paczka do przeglądu,\nbez publish. Granice podane w EPSG:4326, kolejność osi trzeba potwierdzić.",
+    "labels": [
+      "job-order",
+      "geometry-qa",
+      "geo-464"
+    ],
+    "comments": [
+      {
+        "author_alias": "Analyst",
+        "body_md": "2026-11-12 14:00 UTC: bbox w tabelce jest lat/lon. Obowiązuje [11.45, 48.05, 11.75, 48.25] w kolejności min_lon, min_lat, max_lon, max_lat. Release 2026-11 oznacza 2026.11."
+      }
+    ],
+    "links": [],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "E4-T1",
+    "type": "Task",
+    "parent": "E4",
+    "summary": "GEO-464 - rebuild candidate junctions",
+    "description_md": "Conflation na zaakceptowanym wejściu z ingest. Dzielimy na chunki według\npotwierdzonego bbox z epika, zachowujemy oryginalne identyfikatory segmentów.\nPołączyć kandydatów węzłów na granicach chunków, zanim policzymy błędy.\nNie uruchamiać automatycznej reklasyfikacji highway=motorway.",
+    "labels": [
+      "processing-step",
+      "conflation"
+    ],
+    "comments": [],
+    "links": [
+      {
+        "type": "Blocks",
+        "to": "E4-T2"
+      }
+    ],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "E4-T2",
+    "type": "Task",
+    "parent": "E4",
+    "summary": "GEO-464 - validate intersections / false motorway",
+    "description_md": "Walidacja geometryczna roads i junctions. Brak wspólnego węzła jest błędem\ntylko dla skrzyżowania na tym samym poziomie. Nie łączyć wiaduktów.\n\nPodejrzane highway=motorway trafią do raportu kontroli; decyzja o zmianie\ntagu wymaga analityka. To nie jest zgoda na modyfikację źródłowej mapy.",
+    "labels": [
+      "processing-step",
+      "validation"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E4-T3",
+    "type": "Task",
+    "parent": "E4",
+    "summary": "GEO-464 - export review package",
+    "description_md": "Wyeksportować geojson do katalogu review z zamówienia. W opisie wyników\nrozdzielić brakujące węzły od podejrzanych klas highway.\nJeden job, dwie warstwy. Publikacja poprawionej mapy nie jest częścią zamówienia.",
+    "labels": [
+      "processing-step",
+      "export"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E5",
+    "type": "Epic",
+    "parent": null,
+    "summary": "Daily dashboard check failures - Berlin refresh",
+    "description_md": "DASH-465 od Operations Analytics. Poranny dashboard pokazał stare county\ndla roads i addresses. Zamawiamy przeliczenie danych i publikację agregatów,\nnie naprawę widoku dashboardu i nie zmianę schematu bazy.\n\nregion=DE-BE; area=Berlin; release=2026.11; bbox=none (cały region).\nStart: validation na gotowych tabelach wejściowych z listopada.\nPotem export i publish. Wynik delta, katalog dbfs:/map-jobs/dash-465/2026-11/.\nDeadline 2026-11-14. Requester team: Operations Analytics.\n\nKopia rozmowy z dyżuru:\n> @On-call stare uruchomienie skończyło się o 06:12 UTC, a kontrola dashboardu\n> była o 06:00 UTC. Proszę nie przepisywać godziny zakończenia do deadline.\n\nNie robimy ingest ponownie. Weryfikacja ma ustalić, czy aktualne agregaty\nodpowiadają zaakceptowanemu wejściu.",
+    "labels": [
+      "job-order",
+      "dashboard-refresh",
+      "dash-465"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "E5-T1",
+    "type": "Task",
+    "parent": "E5",
+    "summary": "DASH-465 - daily DB check before rerun",
+    "description_md": "Zrzut roboczego zapytania z porannego sprawdzenia:\n\n```sql\nSELECT layer, COUNT(*) AS row_count\nFROM accepted_map_data\nWHERE region_code = 'DE-BE' AND release_id = '2026.10'\nGROUP BY layer;\n```\n\nWygląda jak sprawdzenie poprzedniego miesiąca. Przed zatwierdzeniem configu\npotrzebujemy potwierdzenia release, nie zgadywać po liczbie rekordów.",
+    "labels": [
+      "processing-step",
+      "validation"
+    ],
+    "comments": [
+      {
+        "author_alias": "Analyst",
+        "body_md": "2026-11-13 07:25 UTC: zapytanie powyżej to stary clipboard. Dla DASH-465 filtr jest release_id = 2026.11, region_code = DE-BE, layer IN (roads, addresses). Miesiąc 2026.10 służy tylko do porównania i nie jest wejściem runu."
+      }
+    ],
+    "links": [],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "E5-T2",
+    "type": "Task",
+    "parent": "E5",
+    "summary": "DASH-465 - materialize current counters",
+    "description_md": "Export przyjmuje zaakceptowane roads i addresses dla regionu oraz release\nz zamówienia. Format delta; ścieżka w epiku.\nTo odtwarzalna dostawa danych dla dashboardu, nie screen z przeglądarki.",
+    "labels": [
+      "processing-step",
+      "export"
+    ],
+    "comments": [],
+    "links": [
+      {
+        "type": "Blocks",
+        "to": "E5-T3"
+      }
+    ],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E5-T3",
+    "type": "Task",
+    "parent": "E5",
+    "summary": "DASH-465 - publish after count reconciliation",
+    "description_md": "Opublikować agregaty dopiero po uzgodnieniu countów w walidacji.\nWynik sprawdzenia zapisać w komentarzu dyżuru. Czasy start/finish notebooków\nsą diagnostyką wykonania, nie datą wydania danych ani terminem realizacji.",
+    "labels": [
+      "processing-step",
+      "publish"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E6",
+    "type": "Epic",
+    "parent": null,
+    "summary": "Nowa Wieś - POI and address delivery / 26.11",
+    "description_md": "POI-462 od zespołu Local Search. Area w formularzu: Nowa Wieś.\nWydanie 26.11, region PL-30. Zamawiamy poi i adresses, bez roads i speed limits.\nNie mylić ze SL-461: tamto zamówienie jest w innym województwie.\n\nNotebook entry: ingest, potem validation i export.\nFormat geojson; output dbfs:/map-jobs/poi-462/delivery/; termin 2026-11-17.\nGranice wycinka potwierdzi Analyst w podzadaniu do ingest.",
+    "labels": [
+      "job-order",
+      "poi-addresses",
+      "poi-462"
+    ],
+    "comments": [
+      {
+        "author_alias": "Requester - Local Search",
+        "body_md": "2026-11-12 10:05 UTC: adresses to addresses. Chodzi o obszar PL-30 opisany w podzadaniu, nie wolno kopiować bbox ze SL-461 mimo identycznej nazwy Nowa Wieś. Wydanie 26.11 oznacza listopad 2026, czyli 2026.11."
+      }
+    ],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E6-T1",
+    "type": "Task",
+    "parent": "E6",
+    "summary": "POI-462 - prepare chunked input",
+    "description_md": "Ingest tylko poi i addresses. Bbox z podzadania jest parametrem tego runu;\nnie wyszukujemy granic po samej nazwie Nowa Wieś.\nStary test dla roads w innym regionie nie jest wzorcem dla tego joba.",
+    "labels": [
+      "processing-step",
+      "ingest"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E6-T2",
+    "type": "Task",
+    "parent": "E6",
+    "summary": "POI-462 - validate address joins",
+    "description_md": "Sprawdzić złączenia poi do addresses w potwierdzonym wycinku. Nie wycinać\npunktów wyłącznie przez tekst pola miejscowości; używamy bbox zamówienia.\nRaportować brakujące numery i duplikaty identyfikatorów źródłowych.",
+    "labels": [
+      "processing-step",
+      "validation"
+    ],
+    "comments": [],
+    "links": [
+      {
+        "type": "Blocks",
+        "to": "E6-T3"
+      }
+    ],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E6-T3",
+    "type": "Task",
+    "parent": "E6",
+    "summary": "POI-462 - GeoJSON delivery",
+    "description_md": "Eksport po walidacji. Osobne warstwy poi oraz addresses w jednej dostawie\npod katalogiem z epika. Nie łączyć zamówień SL-461 i POI-462 po area_name.",
+    "labels": [
+      "processing-step",
+      "export"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E6-T1-S1",
+    "type": "Subtask",
+    "parent": "E6-T1",
+    "summary": "POI-462 - granice dla chunkera",
+    "description_md": "Potwierdzenie okna roboczego od Local Search:\n\n```yaml\nregion: PL-30\narea_name: Nowa Wieś\nbbox: [16.800, 52.300, 16.860, 52.340]\n```\n\nEPSG:4326, min_lon/min_lat/max_lon/max_lat. Nazwa obszaru jest etykietą\nzamówienia. Zakres definiuje ten wycinek, nie geokoder nazw miejscowości.",
+    "labels": [
+      "parameter-check",
+      "bbox"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "Done"
+  },
+  {
+    "ref": "E7",
+    "type": "Epic",
+    "parent": null,
+    "summary": "SL 461 / Nowa Wies / speed refresh 2026-11",
+    "description_md": "Wpłynęło drugim formularzem po przekazaniu requestu do innej kolejki.\nZespół zamawiający Map Requests; numer źródłowy SL-461.\n\nRegion PL-14; area Nowa Wies; bbox i layers jak w zamówieniu SL-461\n\"Speed limits refresh - Nowa Wieś / PL-MZ / release 26.11\".\nCzyli roads + speed_limits, listopad 2026, start validation, potem export\ni publish. Geojson do dbfs:/map-jobs/sl-461/preview/. Termin 2026-11-18.\n\nNie potrafię powiedzieć, czy to osobny odbiór, czy zdublowany formularz.\n@Map-Requests potrzebne potwierdzenie. Nie uruchamiać obu zamówień równolegle.",
+    "labels": [
+      "job-order",
+      "speed-limits",
+      "sl-461"
+    ],
+    "comments": [
+      {
+        "author_alias": "Requester - Map Requests",
+        "body_md": "2026-11-13 08:35 UTC: nazwa Nowa Wies została bez polskich znaków w formularzu; poprawna nazwa Nowa Wieś. Bbox to dokładnie potwierdzony wycinek SL-461 w PL-14, nie POI-462."
+      },
+      {
+        "author_alias": "Analyst",
+        "body_md": "2026-11-13 08:50 UTC: w głównym SL-461 jest już parquet, katalog final i termin 2026-11-19. Ten formularz nadal ma stary wariant. Oznaczam jako prawdopodobny duplikat, ale zamawiający nie potwierdził anulowania ani osobnego odbioru. Nie kopiować nowych wartości tutaj bez decyzji o intencji tego zamówienia."
+      }
+    ],
+    "links": [
+      {
+        "type": "Duplicate",
+        "to": "E1"
+      }
+    ],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E7-T1",
+    "type": "Task",
+    "parent": "E7",
+    "summary": "SL-461 second form - validation hold",
+    "description_md": "Nie rezerwować runu. Czekamy na decyzję, czy drugi formularz jest duplikatem.\nJeśli osobny odbiór, potrzebujemy akceptacji jego własnego formatu i terminu.\nZakres przestrzenny odziedziczony tekstowo z pierwotnego SL-461.",
+    "labels": [
+      "processing-step",
+      "validation",
+      "hold"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E7-T2",
+    "type": "Task",
+    "parent": "E7",
+    "summary": "SL-461 second form - preview export?",
+    "description_md": "W drugim formularzu nadal geojson/preview. Nie zastępować go parquet/final\ntylko dlatego, że taki wariant jest nowszy w innym zamówieniu.\nNajpierw requester ma wyjaśnić, czy potrzebuje drugiej dostawy.",
+    "labels": [
+      "processing-step",
+      "export",
+      "hold"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "E7-T3",
+    "type": "Task",
+    "parent": "E7",
+    "summary": "SL-461 second form - publish hold",
+    "description_md": "Wstrzymać publish do rozstrzygnięcia duplikatu i akceptacji eksportu.\nLink Duplicate jest wskazówką analityka, nie potwierdzeniem biznesowym\nanulowania joba. Status To Do nie uprawnia do uruchomienia.",
+    "labels": [
+      "processing-step",
+      "publish",
+      "hold"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "L1",
+    "type": "Task",
+    "parent": null,
+    "summary": "SL-461 - znaki przy wlocie",
+    "description_md": "Notatka do zamówienia SL-461 \"Speed limits refresh - Nowa Wieś / PL-MZ / release 26.11\".\nZostała w kolejce terenowej, bo formularz nie miał parenta.\n\nW zdjęciach widać 50 km/h przy wlocie; na drodze serwisowej znak zasłonięty.\nProszę nie przepisywać limitu z drogi głównej na serwisową. @Data-QA ma\nporównać identyfikatory segmentów z przyjętym wsadem, bez zgadywania ze zdjęcia.",
+    "labels": [
+      "field-check"
+    ],
+    "comments": [
+      {
+        "author_alias": "Analyst",
+        "body_md": "2026-11-12 16:10 UTC: zestaw znaków sprawdzony dla SL-461 rev c. Droga serwisowa zostaje w raporcie jako manual review, nie blokuje eksportu poprawnych rekordów. W notes configu zachować tę informację; bez automatycznej zmiany limitu."
+      }
+    ],
+    "links": [],
+    "seed_status": "Done"
+  },
+  {
+    "ref": "L2",
+    "type": "Task",
+    "parent": null,
+    "summary": "MIG-463 - gdzie odkładać wynik SQL",
+    "description_md": "Dotyczy \"WB-ROADS-07 -> SQL / Gdańsk - first delivery\", source request MIG-463.\nNie ustawiono parenta po przeniesieniu zgłoszenia z kolejki operacyjnej.\n\nZnaleźliśmy stary katalog roboczy dbfs:/scratch/wb-roads-07/compare/.\nTo wyłącznie wynik porównania z poprzedniego miesiąca. Czy Data Platform\nma już docelowy kontener dla dostawy parquet?",
+    "labels": [
+      "storage-question"
+    ],
+    "comments": [
+      {
+        "author_alias": "Data Platform",
+        "body_md": "2026-11-13 08:05 UTC: nie ma jeszcze zatwierdzonego output_path dla MIG-463. Nie używać scratch ani zgadywanego abfss://. Zamawiający musi podać docelową ścieżkę i potwierdzić uprawnienia przed eksportem."
+      }
+    ],
+    "links": [],
+    "seed_status": "In Progress"
+  },
+  {
+    "ref": "N1",
+    "type": "Task",
+    "parent": null,
+    "summary": "VPN access - nowa maszyna dyżurna",
+    "description_md": "Prośba o dostęp VPN do środowiska testowego dla stanowiska dyżurnego.\nNie dotyczy żadnego zamówienia przetwarzania map. Nie ma regionu, warstw\nani wydania danych. @IT-Support proszę przekazać instrukcję przez zwykłą kolejkę\ndostępową. Nie wpisywać haseł ani danych logowania w komentarzu.",
+    "labels": [
+      "access-request"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "To Do"
+  },
+  {
+    "ref": "N2",
+    "type": "Task",
+    "parent": null,
+    "summary": "Dashboard - legenda obcina tekst na małym ekranie",
+    "description_md": "Na małym ekranie etykieta legendy łamie się po dwóch literach. Problem dotyczy\nukładu interfejsu, a nie danych albo uruchomienia notebooków. Odtwarza się\nrównież na statycznym ekranie demonstracyjnym. Prośba do zespołu UI o zmianę\nszerokości etykiet. Nie uruchamiać odświeżenia danych w ramach tego zgłoszenia.",
+    "labels": [
+      "ui-bug"
+    ],
+    "comments": [],
+    "links": [],
+    "seed_status": "In Progress"
+  }
+]

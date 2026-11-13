@@ -1,0 +1,62 @@
+{
+  "TEST-12": [
+    {
+      "id": 10000,
+      "self": "https://api.atlassian.com/ex/jira/00000000-0000-0000-0000-000000000000/rest/api/3/issue/TEST-12/remotelink/10000",
+      "application": {},
+      "object": {
+        "url": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/1",
+        "title": "PR #1: TEST-12: kontrola pustych geometrii dla OSM-460 (Kraków)",
+        "icon": {},
+        "status": {
+          "icon": {}
+        }
+      }
+    }
+  ],
+  "TEST-17": [
+    {
+      "id": 10001,
+      "self": "https://api.atlassian.com/ex/jira/00000000-0000-0000-0000-000000000000/rest/api/3/issue/TEST-17/remotelink/10001",
+      "application": {},
+      "object": {
+        "url": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/2",
+        "title": "PR #2: TEST-17: scalanie węzłów na granicach chunków (GEO-464)",
+        "icon": {},
+        "status": {
+          "icon": {}
+        }
+      }
+    }
+  ],
+  "TEST-15": [
+    {
+      "id": 10002,
+      "self": "https://api.atlassian.com/ex/jira/00000000-0000-0000-0000-000000000000/rest/api/3/issue/TEST-15/remotelink/10002",
+      "application": {},
+      "object": {
+        "url": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/3",
+        "title": "PR #3: TEST-15: selektor dróg PL-22 zachowuje road_id (MIG-463)",
+        "icon": {},
+        "status": {
+          "icon": {}
+        }
+      }
+    }
+  ],
+  "TEST-13": [
+    {
+      "id": 10003,
+      "self": "https://api.atlassian.com/ex/jira/00000000-0000-0000-0000-000000000000/rest/api/3/issue/TEST-13/remotelink/10003",
+      "application": {},
+      "object": {
+        "url": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/9",
+        "title": "PR #9: OSM-460: walidacja referencji węzłów (Kraków)",
+        "icon": {},
+        "status": {
+          "icon": {}
+        }
+      }
+    }
+  ]
+}

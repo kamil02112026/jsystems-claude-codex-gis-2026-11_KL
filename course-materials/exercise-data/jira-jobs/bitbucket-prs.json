@@ -1,0 +1,803 @@
+{
+  "workspace": "course-workspace",
+  "repo": "map-data-jobs-pipelines",
+  "note": "Eksport z Bitbucket MCP (getBitbucketRepoPullRequest, listBitbucketRepoPullRequestComments, listBitbucketRepoCommits include=branch exclude=main). Adres e-mail autora commitów zastąpiono placeholderem; odpowiedzi odtworzone ze zwróconych pól (updated_on w PR ustawiono równo created_on). Pole jira_remote_links to odpowiedź getJiraIssueRemoteIssueLinks dla zgłoszeń, na które utworzono remote link do PR; pusty obiekt = brak linku po stronie Jira.",
+  "pull_requests": [
+    {
+      "pr": {
+        "data": {
+          "id": 1,
+          "title": "TEST-12: kontrola pustych geometrii dla OSM-460 (Kraków)",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "feature/TEST-12-osm-460-empty-geometries"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:50:05.985120+00:00",
+          "updated_on": "2026-11-13T02:50:05.985120+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/1"
+            }
+          },
+          "summary": {
+            "raw": "Zapytanie sprawdzające puste geometrie w roads i junctions dla okna Kraków, wydanie 2026.11.\n\nZgłoszenie Jira: https://course-site.atlassian.net/browse/TEST-12\n\nZakres: tylko sql/osm_460_empty_geometries.sql, bez zmiany bbox."
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [],
+          "pagelen": 10,
+          "size": 0
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "73da2881ebb40cc64f9e464f6d9cccb31ae994a7",
+              "message": "TEST-12: kontrola pustych geometrii w roads i junctions\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:49:42+00:00",
+              "parents": [
+                {
+                  "hash": "aec38269a77016f45bf094f961f4f9204f37e66c"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/commits/73da2881ebb40cc64f9e464f6d9cccb31ae994a7"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {
+        "TEST-12": [
+          {
+            "id": 10000,
+            "self": "https://api.atlassian.com/ex/jira/00000000-0000-0000-0000-000000000000/rest/api/3/issue/TEST-12/remotelink/10000",
+            "application": {},
+            "object": {
+              "url": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/1",
+              "title": "PR #1: TEST-12: kontrola pustych geometrii dla OSM-460 (Kraków)",
+              "icon": {},
+              "status": {
+                "icon": {}
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "pr": {
+        "data": {
+          "id": 2,
+          "title": "TEST-17: scalanie węzłów na granicach chunków (GEO-464)",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "feature/TEST-17-geo-464-chunk-border-nodes"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:50:07.410697+00:00",
+          "updated_on": "2026-11-13T02:50:07.410697+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/2"
+            }
+          },
+          "summary": {
+            "raw": "Łączy kandydatów węzłów na granicach chunków przed liczeniem błędów, zachowuje identyfikatory segmentów. Nie zmienia tagów highway.\n\nZgłoszenie Jira: https://course-site.atlassian.net/browse/TEST-17"
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [],
+          "pagelen": 10,
+          "size": 0
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "741a0f260920642228009eb15e1a5335f893d43a",
+              "message": "TEST-17: laczenie kandydatow wezlow na granicach chunkow\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:49:45+00:00",
+              "parents": [
+                {
+                  "hash": "aec38269a77016f45bf094f961f4f9204f37e66c"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/commits/741a0f260920642228009eb15e1a5335f893d43a"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {
+        "TEST-17": [
+          {
+            "id": 10001,
+            "self": "https://api.atlassian.com/ex/jira/00000000-0000-0000-0000-000000000000/rest/api/3/issue/TEST-17/remotelink/10001",
+            "application": {},
+            "object": {
+              "url": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/2",
+              "title": "PR #2: TEST-17: scalanie węzłów na granicach chunków (GEO-464)",
+              "icon": {},
+              "status": {
+                "icon": {}
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "pr": {
+        "data": {
+          "id": 3,
+          "title": "TEST-15: selektor dróg PL-22 zachowuje road_id (MIG-463)",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "feature/TEST-15-roads-selector-pl22"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:50:08.735473+00:00",
+          "updated_on": "2026-11-13T02:50:08.735473+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/3"
+            }
+          },
+          "summary": {
+            "raw": "Zamiennik węzła FME SelectCountryRoads dla Gdańska; dodane sortowanie po road_id do porównania z FME.\n\nZgłoszenie Jira: https://course-site.atlassian.net/browse/TEST-15"
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [
+            {
+              "id": 901494886,
+              "content": {
+                "raw": "Czy ten selektor ma też pokrywać zgłoszenie o Gdańsku, sprawdźcie TEST-3 (epik MIG-463). Zespół Data Platform nadal nie podał ścieżki dostawy."
+              },
+              "user": {
+                "display_name": "Autor kursowy 1"
+              },
+              "created_on": "2026-11-13T02:50:57.304045+00:00",
+              "pending": false
+            }
+          ],
+          "pagelen": 10,
+          "size": 1
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "d30e650d0683e20dfbe6fe1b7461fb5002df36c5",
+              "message": "TEST-15: selektor drog PL-22 zachowuje road_id\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:49:48+00:00",
+              "parents": [
+                {
+                  "hash": "aec38269a77016f45bf094f961f4f9204f37e66c"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/commits/d30e650d0683e20dfbe6fe1b7461fb5002df36c5"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {
+        "TEST-15": [
+          {
+            "id": 10002,
+            "self": "https://api.atlassian.com/ex/jira/00000000-0000-0000-0000-000000000000/rest/api/3/issue/TEST-15/remotelink/10002",
+            "application": {},
+            "object": {
+              "url": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/3",
+              "title": "PR #3: TEST-15: selektor dróg PL-22 zachowuje road_id (MIG-463)",
+              "icon": {},
+              "status": {
+                "icon": {}
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "pr": {
+        "data": {
+          "id": 4,
+          "title": "Eksport delta dla Berlina: opcje partycjonowania",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "feature/TEST-21-dash-465-export-delta"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:50:10.183142+00:00",
+          "updated_on": "2026-11-13T02:50:10.183142+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/4"
+            }
+          },
+          "summary": {
+            "raw": "Dodaje export_options do configu DASH-465: partycjonowanie po warstwie, bez nadpisywania. Ścieżka i format bez zmian."
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [],
+          "pagelen": 10,
+          "size": 0
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "f898b6589b057b13c0218f44bf34c8cac91fed71",
+              "message": "TEST-21: eksport delta dla Berlina - sciezka i format w configu\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:48:52+00:00",
+              "parents": [
+                {
+                  "hash": "aec38269a77016f45bf094f961f4f9204f37e66c"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/commits/f898b6589b057b13c0218f44bf34c8cac91fed71"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {}
+    },
+    {
+      "pr": {
+        "data": {
+          "id": 5,
+          "title": "text_to_yaml: walidacja pola format",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "feature/text-to-yaml-output-format"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:50:11.596860+00:00",
+          "updated_on": "2026-11-13T02:50:11.596860+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/5"
+            }
+          },
+          "summary": {
+            "raw": "Skrypt oznacza nieznany format wyjściowy znakiem ???, żeby nie trafił do configu bez przeglądu. Wynika z rozmowy o eksporcie z TSET-9 (geojson vs parquet)."
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [
+            {
+              "id": 901494879,
+              "content": {
+                "raw": "To chyba dotyczy zgłoszenia o eksporcie SL-461, sprawdźcie czy format ma być geojson czy parquet, zanim to wejdzie."
+              },
+              "user": {
+                "display_name": "Autor kursowy 1"
+              },
+              "created_on": "2026-11-13T02:50:56.415187+00:00",
+              "pending": false
+            }
+          ],
+          "pagelen": 10,
+          "size": 1
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "a496907fe0884b7310f6b2f35786cec4107368e3",
+              "message": "text_to_yaml: obsluga pola format z zamowienia\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:48:55+00:00",
+              "parents": [
+                {
+                  "hash": "aec38269a77016f45bf094f961f4f9204f37e66c"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/commits/a496907fe0884b7310f6b2f35786cec4107368e3"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {}
+    },
+    {
+      "pr": {
+        "data": {
+          "id": 6,
+          "title": "Poprawka kolejności osi bbox w jobie Nowa Wieś",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "fix/sl-461-bbox-order"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:50:13.310586+00:00",
+          "updated_on": "2026-11-13T02:50:13.310586+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/6"
+            }
+          },
+          "summary": {
+            "raw": "Zamówienie SL-461 (Map Requests): bbox z notatki terenowej miał kolejność min_lat, min_lon. W YAML musi być [min_lon, min_lat, max_lon, max_lat] w EPSG:4326."
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [
+            {
+              "id": 901494901,
+              "content": {
+                "raw": "To jest ten sam obszar co drugi formularz SL-461 (TEST-7?). Nie uruchamiajmy dwóch runów, dopóki Map Requests nie potwierdzi duplikatu."
+              },
+              "user": {
+                "display_name": "Autor kursowy 1"
+              },
+              "created_on": "2026-11-13T02:50:59.447786+00:00",
+              "pending": false
+            }
+          ],
+          "pagelen": 10,
+          "size": 1
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "1d966a49b548e93a2c7e348657873380a96eb94f",
+              "message": "SL-461: poprawna kolejnosc osi w bbox (lon/lat)\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:49:00+00:00",
+              "parents": [
+                {
+                  "hash": "aec38269a77016f45bf094f961f4f9204f37e66c"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/commits/1d966a49b548e93a2c7e348657873380a96eb94f"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {}
+    },
+    {
+      "pr": {
+        "data": {
+          "id": 7,
+          "title": "TEST-99: brakujące węzły na skrzyżowaniach (München)",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "feature/geo-464-junction-checks"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:50:14.653494+00:00",
+          "updated_on": "2026-11-13T02:50:14.653494+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/7"
+            }
+          },
+          "summary": {
+            "raw": "Zapytanie o kandydatów na brakujące węzły, tylko ten sam poziom, bez wiaduktów. Powiązane z TEST-18 (walidacja skrzyżowań) i GEO-464."
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [],
+          "pagelen": 10,
+          "size": 0
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "20b18d80900a0c378771dfd1cb0df3b6dce383d5",
+              "message": "GEO-464: zapytanie o brakujace wezly na skrzyzowaniach\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:49:04+00:00",
+              "parents": [
+                {
+                  "hash": "aec38269a77016f45bf094f961f4f9204f37e66c"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/commits/20b18d80900a0c378771dfd1cb0df3b6dce383d5"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {}
+    },
+    {
+      "pr": {
+        "data": {
+          "id": 8,
+          "title": "Nowa Wieś: config joba dla POI i adresów",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "feature/nowa-wies-poi-job"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:50:16.075026+00:00",
+          "updated_on": "2026-11-13T02:50:16.075026+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/8"
+            }
+          },
+          "summary": {
+            "raw": "Nowy plik jobs/poi-462.yaml. Warstwy poi i addresses, start od ingest, wynik geojson."
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [
+            {
+              "id": 901494891,
+              "content": {
+                "raw": "Wydaje mi się, że to zamówienie Local Search z listopada, w Jirze chyba TEST-24. Sprawdźcie wersję wydania w YAML przed akceptacją."
+              },
+              "user": {
+                "display_name": "Autor kursowy 1"
+              },
+              "created_on": "2026-11-13T02:50:58.325939+00:00",
+              "pending": false
+            }
+          ],
+          "pagelen": 10,
+          "size": 1
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "d00c2de9954406d241b25c15c46680dbe1b29f4c",
+              "message": "Nowa Wies: config joba dla POI i adresow\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:49:07+00:00",
+              "parents": [
+                {
+                  "hash": "aec38269a77016f45bf094f961f4f9204f37e66c"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/commits/d00c2de9954406d241b25c15c46680dbe1b29f4c"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {}
+    },
+    {
+      "pr": {
+        "data": {
+          "id": 9,
+          "title": "OSM-460: walidacja referencji węzłów (Kraków)",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "feature/osm-460-connectivity-checks"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:50:17.462376+00:00",
+          "updated_on": "2026-11-13T02:50:17.462376+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/9"
+            }
+          },
+          "summary": {
+            "raw": "Zapytanie wykrywające segmenty roads wskazujące na nieistniejący węzeł. Dotyczy zamówienia OSM-460, wydanie 2026.11."
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [],
+          "pagelen": 10,
+          "size": 0
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "bffedcdfdfeeb95d413e1c4d2fd200155149c1f3",
+              "message": "OSM-460: zapytania walidacji referencji wezlow\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:48:49+00:00",
+              "parents": [
+                {
+                  "hash": "aec38269a77016f45bf094f961f4f9204f37e66c"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/commits/bffedcdfdfeeb95d413e1c4d2fd200155149c1f3"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {
+        "TEST-13": [
+          {
+            "id": 10003,
+            "self": "https://api.atlassian.com/ex/jira/00000000-0000-0000-0000-000000000000/rest/api/3/issue/TEST-13/remotelink/10003",
+            "application": {},
+            "object": {
+              "url": "https://bitbucket.org/course-workspace/map-data-jobs-pipelines/pull-requests/9",
+              "title": "PR #9: OSM-460: walidacja referencji węzłów (Kraków)",
+              "icon": {},
+              "status": {
+                "icon": {}
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "other_repo_pull_requests": [
+    {
+      "workspace": "course-workspace",
+      "repo": "ai-php-course-08-2026",
+      "pr": {
+        "data": {
+          "id": 1,
+          "title": "TEST-9: ćwiczenie eksport CSV w PHP",
+          "state": "OPEN",
+          "author": {
+            "display_name": "Autor kursowy 1"
+          },
+          "source": {
+            "branch": {
+              "name": "feature/exercise-php-export"
+            }
+          },
+          "destination": {
+            "branch": {
+              "name": "main"
+            }
+          },
+          "created_on": "2026-11-13T02:51:21.709032+00:00",
+          "updated_on": "2026-11-13T02:51:21.709032+00:00",
+          "links": {
+            "html": {
+              "href": "https://bitbucket.org/course-workspace/ai-php-course-08-2026/pull-requests/1"
+            }
+          },
+          "summary": {
+            "raw": "Ćwiczenie z eksportem do CSV dla kursu PHP. Klucz TEST-9 wpisany omyłkowo, to repozytorium nie ma nic wspólnego z zadaniami map w Jirze."
+          }
+        }
+      },
+      "comments": {
+        "data": {
+          "values": [],
+          "pagelen": 10,
+          "size": 0
+        }
+      },
+      "commits": {
+        "data": {
+          "values": [
+            {
+              "hash": "1192e79602707e05b31180a781c26a83f0ba24e3",
+              "message": "Cwiczenie: eksport CSV w PHP (TEST-9)\n",
+              "author": {
+                "raw": "Autor kursowy 1 <[email usunięty]>",
+                "user": {
+                  "display_name": "Autor kursowy 1"
+                }
+              },
+              "date": "2026-11-13T02:51:10+00:00",
+              "parents": [
+                {
+                  "hash": "badeb87edbb468f7ec4795d3af378b25851e03a1"
+                }
+              ],
+              "links": {
+                "html": {
+                  "href": "https://bitbucket.org/course-workspace/ai-php-course-08-2026/commits/1192e79602707e05b31180a781c26a83f0ba24e3"
+                }
+              }
+            }
+          ],
+          "pagelen": 30
+        }
+      },
+      "jira_remote_links": {}
+    }
+  ]
+}
