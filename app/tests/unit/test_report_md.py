@@ -187,3 +187,20 @@ def test_deterministic(tmp_path: Path) -> None:  # TAC-004-01
         assert (a / name).read_bytes() == (b / name).read_bytes()
     run_json = (a / "run.json").read_text(encoding="utf-8")
     assert run_json.index('"a"') < run_json.index('"b"')
+
+
+def test_lit_rows_render_in_funnel_candidates_and_queue(tmp_path: Path) -> None:  # ADR-004 §3.6 (lit)
+    vm = make_vm(
+        model_reading=True,
+        attributes=["lit"],
+        funnel=[FunnelRow("lit", 10, 7, 3, 2, 1)],
+        candidates_by_priority={"lit": {"wysoki": 2, "średni": 1}},
+        not_comparable_reasons={"nieznana wartość lit": 1},
+    )
+    item = make_item(atrybut="lit", osm_raw="no", osm_normalized="no", powod="Lampa widoczna na zdjęciu.")
+    text = render(tmp_path, vm, [item])
+    assert re.search(r"^\| lit \| 10 \|", text, flags=re.M)
+    assert re.search(r"^\| lit \| 2 \| 1 \| 0 \|$", text, flags=re.M)
+    assert "wysoki<br>kandydat_rozbieżności<br>lit |" in text
+    assert "Lampa widoczna na zdjęciu." in text
+    assert "Brak kandydatów" not in text

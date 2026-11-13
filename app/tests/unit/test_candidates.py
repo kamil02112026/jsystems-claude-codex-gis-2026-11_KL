@@ -7,7 +7,9 @@ import pytest
 from mapqa.candidates.priority import priority
 from mapqa.candidates.rules import CandidateInput, build_candidates
 from mapqa.contract.models import AttributeValue, CascadeResult, ModelAttempt, PhotoRoadLink
+from mapqa.normalize.lit import normalize_lit
 from mapqa.normalize.maxspeed import normalize_maxspeed
+from mapqa.questions.catalog import STREET_LAMP_VISIBLE
 
 
 def make_input(
@@ -141,3 +143,110 @@ def test_unresolved_cascade_no_candidate(status: str) -> None:
 def test_order_is_preserved() -> None:
     inputs = [make_input("40", photo_id="b"), make_input("30", photo_id="a")]
     assert [c.photo_id for c in build_candidates(inputs)] == ["b", "a"]
+
+
+# --- `lit` (street lamp, ADR-004 §3.1, §3.3; ADR-002 §3.5) -------------------------------
+
+
+def make_lit(
+    answer: str | None = "tak",
+    osm: AttributeValue | None = None,
+    *,
+    resolved_by: str | None = "1",
+    flags: list[str] | None = None,
+    way: int | None = 7,
+    final_status: str = "resolved",
+    probability: float = 0.93,
+    photo_id: str = "p1",
+) -> CandidateInput:
+    level = 2 if resolved_by == "2" else 1
+    attempt = ModelAttempt(
+        level=level, model="m", answer=answer, probability=probability, status="confident"
+    )
+    return CandidateInput(
+        photo_id=photo_id,
+        link=PhotoRoadLink(photo_id=photo_id, osm_way_id=way, flags=flags or [], link_source="provided"),
+        osm=osm if osm is not None else normalize_lit("no"),
+        cascade=CascadeResult(
+            photo_sha256="b" * 64,
+            question_id=STREET_LAMP_VISIBLE.question_id,
+            attempts=[attempt],
+            final_status=final_status,  # type: ignore[arg-type]
+            resolved_by=resolved_by,  # type: ignore[arg-type]
+            final_answer=answer,
+        ),
+        attribute="lit",
+    )
+
+
+def test_lit01_lamp_visible_vs_osm_no_high() -> None:
+    [c] = build_candidates([make_lit("tak")])
+    assert c.attribute == "lit"
+    assert c.rule == "photo_vs_osm"
+    assert c.priority == "wysoki"
+    assert c.reason_pl == "Lampa widoczna na zdjęciu (poziom 1, p=0,93), OSM `lit=no`."
+
+
+def test_lit01_lamp_not_visible_vs_osm_yes() -> None:
+    [c] = build_candidates([make_lit("nie", normalize_lit("yes"))])
+    assert c.rule == "photo_vs_osm"
+    assert c.reason_pl == "Lampa niewidoczna na zdjęciu (poziom 1, p=0,93), OSM `lit=yes`."
+
+
+@pytest.mark.parametrize(("answer", "raw"), [("tak", "yes"), ("nie", "no"), ("tak", "automatic")])
+def test_lit02_agreement_no_candidate(answer: str, raw: str) -> None:
+    assert build_candidates([make_lit(answer, normalize_lit(raw))]) == []
+
+
+def test_lit02_yes_conditional_compared_as_yes_with_note() -> None:
+    [c] = build_candidates([make_lit("nie", normalize_lit("automatic"))])
+    assert c.rule == "photo_vs_osm"
+    assert c.reason_pl == (
+        "Lampa niewidoczna na zdjęciu (poziom 1, p=0,93), OSM `lit=automatic` (`lit` warunkowe)."
+    )
+
+
+def test_lit02_level2_medium_and_flags() -> None:
+    [c] = build_candidates([make_lit("tak", resolved_by="2", flags=["ambiguous_candidates"])])
+    assert c.priority == "średni"
+    assert "(poziom 2, p=0,93)" in c.reason_pl
+    assert c.reason_pl.endswith("Flagi: `ambiguous_candidates`.")
+
+
+def test_lit03_osm_missing_lamp_visible() -> None:
+    [c] = build_candidates([make_lit("tak", AttributeValue(status="missing"))])
+    assert c.rule == "osm_missing_photo_confident"
+    assert c.priority == "wysoki"
+    assert c.reason_pl == "Lampa widoczna na zdjęciu (poziom 1, p=0,93), OSM bez `lit`."
+
+
+def test_lit03_osm_missing_lamp_not_visible() -> None:
+    [c] = build_candidates([make_lit("nie", AttributeValue(status="missing"))])
+    assert c.rule == "osm_missing_photo_confident"
+    assert c.reason_pl == "Lampa niewidoczna na zdjęciu (poziom 1, p=0,93), OSM bez `lit`."
+
+
+def test_lit03_osm_not_comparable_no_candidate() -> None:
+    assert build_candidates([make_lit("tak", normalize_lit("bogus"))]) == []
+
+
+def test_lit04_nie_widac_never_creates_candidate() -> None:  # D10-I1
+    assert build_candidates([make_lit("nie widać")]) == []
+    assert build_candidates([make_lit("nie widać", AttributeValue(status="missing"))]) == []
+
+
+def test_lit05_no_road_no_candidate() -> None:
+    assert build_candidates([make_lit("tak", way=None)]) == []
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["abstain", "model_unavailable", "budget_exceeded", "image_out_of_bounds", "skipped_no_model"],
+)
+def test_lit06_unresolved_no_candidate(status: str) -> None:
+    assert build_candidates([make_lit(None, resolved_by="human", final_status=status)]) == []
+
+
+def test_lit_answer_is_not_a_speed_value() -> None:
+    # a speed-attribute input with a lamp answer is not a value reading
+    assert build_candidates([make_input("tak")]) == []

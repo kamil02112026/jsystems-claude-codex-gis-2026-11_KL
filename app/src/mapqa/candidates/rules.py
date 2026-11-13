@@ -1,4 +1,4 @@
-"""Candidate rules (ADR-004 §3.1; ADR-000 D10-I1). MVP: `speed_limit` only."""
+"""Candidate rules (ADR-004 §3.1; ADR-000 D10-I1). Attributes: `speed_limit`, `lit`."""
 
 from __future__ import annotations
 
@@ -9,9 +9,19 @@ from mapqa.candidates.priority import priority
 from mapqa.candidates.reasons import candidate_reason
 from mapqa.contract.models import AttributeValue, Candidate, CascadeResult, ModelAttempt, PhotoRoadLink
 from mapqa.normalize.speed import speeds_equal
-from mapqa.questions.catalog import SPEED_LIMIT_VALUE
+from mapqa.questions.catalog import SPEED_LIMIT_VALUE, STREET_LAMP_VISIBLE, Question
 
 ATTRIBUTE = "speed_limit"
+LIT_ATTRIBUTE = "lit"
+QUESTION_BY_ATTRIBUTE: dict[str, Question] = {
+    ATTRIBUTE: SPEED_LIMIT_VALUE,
+    LIT_ATTRIBUTE: STREET_LAMP_VISIBLE,
+}
+# ADR-004 §3.1: `tak` <-> OSM `yes` / `yes_conditional` (compared as yes), `nie` <-> `no`.
+LIT_OSM_FOR_ANSWER: dict[str, frozenset[str]] = {
+    "tak": frozenset({"yes", "yes_conditional"}),
+    "nie": frozenset({"no"}),
+}
 # TODO(P3): `sources_disagree_photo_supports` and `sources_only` need Overture values.
 
 
@@ -42,18 +52,28 @@ def resolving_attempt(cascade: CascadeResult) -> ModelAttempt | None:
     )
 
 
-def confident_value(cascade: CascadeResult) -> str | None:
-    """Confident value reading: resolved and answer is a value option (D10-I1)."""
-    if cascade.final_status == "resolved" and cascade.final_answer in SPEED_LIMIT_VALUE.value_options:
+def confident_value(cascade: CascadeResult, attribute: str = ATTRIBUTE) -> str | None:
+    """Confident value reading: resolved and answer is a value option of the attribute (D10-I1).
+
+    Unknown attribute -> KeyError (a silent drop of candidates would hide a wiring bug).
+    """
+    options = QUESTION_BY_ATTRIBUTE[attribute].value_options
+    if cascade.final_status == "resolved" and cascade.final_answer in options:
         return cascade.final_answer
     return None
 
 
-def _rule(answer: str, osm: AttributeValue) -> str | None:
+def _agrees(answer: str, osm: AttributeValue, attribute: str) -> bool:
+    if attribute == LIT_ATTRIBUTE:
+        return str(osm.normalized) in LIT_OSM_FOR_ANSWER[answer]
+    return speeds_equal(float(answer), float(osm.normalized))  # type: ignore[arg-type]
+
+
+def _rule(answer: str, osm: AttributeValue, attribute: str = ATTRIBUTE) -> str | None:
     if osm.status == "missing":
         return "osm_missing_photo_confident"
     if osm.status == "ok" and osm.normalized is not None:
-        return None if speeds_equal(float(answer), float(osm.normalized)) else "photo_vs_osm"
+        return None if _agrees(answer, osm, attribute) else "photo_vs_osm"
     return None
 
 
@@ -62,10 +82,10 @@ def build_candidates(inputs: Iterable[CandidateInput]) -> list[Candidate]:
     for inp in inputs:
         if inp.link.osm_way_id is None:
             continue
-        answer = confident_value(inp.cascade)
+        answer = confident_value(inp.cascade, inp.attribute)
         if answer is None:
             continue
-        rule = _rule(answer, inp.osm)
+        rule = _rule(answer, inp.osm, inp.attribute)
         if rule is None:
             continue
         result.append(
@@ -73,7 +93,9 @@ def build_candidates(inputs: Iterable[CandidateInput]) -> list[Candidate]:
                 attribute=inp.attribute,
                 rule=rule,  # type: ignore[arg-type]
                 priority=priority(inp.cascade.resolved_by, inp.link.flags, inp.osm.flags),
-                reason_pl=candidate_reason(answer, resolving_attempt(inp.cascade), inp.osm, inp.link.flags),
+                reason_pl=candidate_reason(
+                    answer, resolving_attempt(inp.cascade), inp.osm, inp.link.flags, inp.attribute
+                ),
                 photo_id=inp.photo_id,
                 osm_way_id=inp.link.osm_way_id,
             )

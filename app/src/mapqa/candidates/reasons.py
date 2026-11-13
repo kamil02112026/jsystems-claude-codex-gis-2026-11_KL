@@ -7,6 +7,9 @@ from collections.abc import Sequence
 from mapqa.contract.models import AttributeValue, ModelAttempt
 
 IMPLICIT_NOTE = "Porównanie z wartością domyślną, nie ze znakiem."
+LIT_CONDITIONAL_NOTE = "(`lit` warunkowe)"
+LIT_ATTRIBUTE = "lit"
+LIT_PHOTO_PHRASE = {"tak": "Lampa widoczna na zdjęciu", "nie": "Lampa niewidoczna na zdjęciu"}
 
 
 def fmt_number(value: float) -> str:
@@ -20,25 +23,42 @@ def fmt_probability(p: float | None) -> str:
     return "brak" if p is None else f"{p:.2f}".replace(".", ",")
 
 
-def raw_text(osm: AttributeValue, *, sep: str = ", ") -> str:
-    """Raw OSM tags as `key=value` (a bare string is the `maxspeed` tag)."""
+def raw_text(osm: AttributeValue, *, sep: str = ", ", key: str = "maxspeed") -> str:
+    """Raw OSM tags as `key=value` (a bare string is the `key` tag, `maxspeed` by default)."""
     raw = osm.raw
     if isinstance(raw, dict):
         return sep.join(f"{k}={v}" for k, v in raw.items())
-    return f"maxspeed={raw}"
+    return f"{key}={raw}"
 
 
 def is_implicit(osm: AttributeValue) -> bool:
     return osm.speed_source == "implicit"
 
 
-def _osm_phrase(osm: AttributeValue) -> str:
+def _osm_phrase(osm: AttributeValue, attribute: str = "speed_limit") -> str:
+    if attribute == LIT_ATTRIBUTE:
+        return _lit_osm_phrase(osm)
     if osm.status == "missing":
         return "OSM bez `maxspeed`"
     phrase = f"OSM `{raw_text(osm)}`"
     if is_implicit(osm) and osm.normalized is not None:
         phrase += f" (implicit, {fmt_number(float(osm.normalized))} km/h)"
     return phrase
+
+
+def _lit_osm_phrase(osm: AttributeValue) -> str:
+    if osm.status == "missing":
+        return "OSM bez `lit`"
+    phrase = f"OSM `{raw_text(osm, key='lit')}`"
+    if osm.normalized == "yes_conditional":
+        phrase += f" {LIT_CONDITIONAL_NOTE}"
+    return phrase
+
+
+def _photo_phrase(answer: str, attribute: str) -> str:
+    if attribute == LIT_ATTRIBUTE:
+        return LIT_PHOTO_PHRASE[answer]
+    return f"Znak {answer} na zdjęciu"
 
 
 def _flags_sentence(link_flags: Sequence[str]) -> str:
@@ -50,10 +70,11 @@ def candidate_reason(
     attempt: ModelAttempt | None,
     osm: AttributeValue,
     link_flags: Sequence[str],
+    attribute: str = "speed_limit",
 ) -> str:
     level = attempt.level if attempt else "?"
     p = fmt_probability(attempt.probability if attempt else None)
-    text = f"Znak {answer} na zdjęciu (poziom {level}, p={p}), {_osm_phrase(osm)}."
+    text = f"{_photo_phrase(answer, attribute)} (poziom {level}, p={p}), {_osm_phrase(osm, attribute)}."
     if is_implicit(osm) and osm.status == "ok":
         text += f" {IMPLICIT_NOTE}"
     return text + _flags_sentence(link_flags)
