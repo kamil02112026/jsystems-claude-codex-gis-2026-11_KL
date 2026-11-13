@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 
 from mapqa.config.schema import FilesSource
-from mapqa.contract.bundle import Bbox, SignLink, SignRecord, SignsBundle
+from mapqa.contract.bundle import DATA_BBOX, Bbox, PhotoLink, PhotoRecord, PhotosBundle, SignLink, SignRecord, SignsBundle
 from mapqa.contract.db import connect, sql_path
 from mapqa.contract.errors import ContractViolation, SourceUnavailable
 from mapqa.contract.hashing import sha256_file
@@ -43,6 +43,22 @@ def _opt(value: str | None) -> str | None:
 
 def _opt_float(value: str | None) -> float | None:
     return float(value) if value not in (None, "") else None
+
+
+def _flags(text: str | None) -> tuple[str, ...]:
+    return tuple(f.strip() for f in (text or "").split(";") if f.strip())
+
+
+PHOTO_IMAGE_DIRS = ("offline", "data/photos")  # ADR-001 §3.3: first existing wins
+
+
+def _photo_image_rel(root: Path, filename: str) -> str | None:
+    """Path relative to the data directory of the first existing image copy, or None."""
+    for folder in PHOTO_IMAGE_DIRS:
+        rel = f"{folder}/{filename}"
+        if (root / rel).is_file():
+            return rel
+    return None
 
 
 class FilesAdapter:
@@ -173,6 +189,88 @@ class FilesAdapter:
                 )
             )
         return SignsBundle(signs=records, links=links, rejected=rejected, files_read=files_read)
+
+    # ---- photos dataset (T32; PRD F2.1–F2.4, ADR-001 §3.3, §4) -----------------------------
+    def load_photos(self, bbox: Bbox | None) -> PhotosBundle:
+        self._require_root()
+        photos_csv, links_csv = self.root / "photos.csv", self.root / "photo_road_links.csv"
+        for f in (photos_csv, links_csv):
+            if not f.is_file():
+                raise SourceUnavailable(f"Brak pliku zestawu photos: {f}")
+        if bbox is None:  # ADR-000 §6: --dataset photos defaults to the data bbox
+            bbox = DATA_BBOX
+        files_read = [str(photos_csv), str(links_csv)]
+        rejected: list[RejectedRecord] = []
+        records: list[PhotoRecord] = []
+
+        with open(photos_csv, encoding="utf-8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        dupes = sorted(pid for pid, n in Counter(r["photo_id"] for r in rows).items() if n > 1)
+        if dupes:
+            raise ContractViolation(f"Powtórzone photo_id w photos.csv: {', '.join(dupes[:5])}")
+        for row in rows:
+            pid = row["photo_id"]
+            coords = _coords(row.get("longitude"), row.get("latitude"))
+            if coords is None:
+                rejected.append(RejectedRecord(dataset="photos", record_id=pid, reason="invalid_value", detail="niepoprawne współrzędne"))
+                continue
+            lon, lat = coords
+            if not bbox.contains(lon, lat):
+                rejected.append(RejectedRecord(dataset="photos", record_id=pid, reason="outside_bbox"))
+                continue
+            rel = _photo_image_rel(self.root, row["filename"])
+            status = "ok"
+            if rel is None:
+                status = "missing_file"
+                rejected.append(RejectedRecord(dataset="photos", record_id=pid, reason="missing_file", detail=f"offline/{row['filename']}"))
+            else:
+                path = self.root / rel
+                files_read.append(str(path))
+                if _sha256(path).lower() != row["sha256"].strip().lower():
+                    status = "hash_mismatch"
+                    rejected.append(RejectedRecord(dataset="photos", record_id=pid, reason="hash_mismatch", detail=rel))
+            records.append(
+                PhotoRecord(
+                    photo_id=pid,
+                    source=row.get("source", ""),
+                    filename=row["filename"],
+                    longitude=lon,
+                    latitude=lat,
+                    heading=_opt_float(row.get("heading")),
+                    captured_at=row.get("captured_at", ""),
+                    sequence=row.get("sequence", ""),
+                    author=row.get("author", ""),
+                    license=row.get("license", ""),
+                    license_url=row.get("license_url", ""),
+                    source_url=row.get("source_url", ""),
+                    sha256=row["sha256"].strip().lower(),
+                    is_panorama=(row.get("is_panorama") or "").strip().lower() == "true",
+                    horizontal_accuracy_m=_opt_float(row.get("horizontal_accuracy_m")),
+                    image_path=rel,
+                    image_status=status,  # type: ignore[arg-type]
+                )
+            )
+
+        kept = {r.photo_id for r in records}
+        with open(links_csv, encoding="utf-8", newline="") as handle:
+            link_rows = [r for r in csv.DictReader(handle) if r["photo_id"] in kept]
+        links = [
+            PhotoLink(
+                photo_id=r["photo_id"],
+                osm_way_id=int(r["osm_way_id"]) if r.get("osm_way_id") else None,
+                overture_id=_opt(r.get("overture_id")),
+                distance_m=_opt_float(r.get("distance_m")),
+                way_bearing=_opt_float(r.get("way_bearing")),
+                bearing_diff=_opt_float(r.get("bearing_diff")),
+                directed_bearing_diff=_opt_float(r.get("directed_bearing_diff")),
+                overture_distance_m=_opt_float(r.get("overture_distance_m")),
+                osm_candidate_count=int(r.get("osm_candidate_count") or 0),
+                match_method=r.get("match_method", ""),
+                candidate_flags=_flags(r.get("candidate_flags")),
+            )
+            for r in link_rows
+        ]
+        return PhotosBundle(photos=records, links=links, rejected=rejected, files_read=files_read)
 
     def _osm_type_tags(self, way_ids: set[int]) -> dict[int, tuple[str | None, str | None]] | None:
         """maxspeed:type and source:maxspeed for the given ways from osm_roads.parquet (plan decision U1)."""

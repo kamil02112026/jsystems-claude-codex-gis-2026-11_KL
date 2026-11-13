@@ -95,3 +95,51 @@ class SignsBundle:
     links: list[SignLink]
     rejected: list[RejectedRecord] = field(default_factory=list)
     files_read: list[str] = field(default_factory=list)  # absolute paths of every input file read
+
+
+@dataclass(frozen=True)
+class PhotoRecord:
+    """One row of photos.csv (ADR-001 §4 `photos`). heading None means empty in the file, never 0 (F2.4)."""
+
+    photo_id: str
+    source: str
+    filename: str
+    longitude: float
+    latitude: float
+    heading: float | None
+    captured_at: str
+    sequence: str
+    author: str
+    license: str
+    license_url: str
+    source_url: str
+    sha256: str
+    is_panorama: bool
+    horizontal_accuracy_m: float | None
+    image_path: str | None  # relative to the data directory; None when the file is missing
+    image_status: ImageStatus
+
+
+@dataclass(frozen=True)
+class PhotoLink:
+    """One row of photo_road_links.csv (ADR-001 §4), all 11 columns."""
+
+    photo_id: str
+    osm_way_id: int | None
+    overture_id: str | None
+    distance_m: float | None
+    way_bearing: float | None
+    bearing_diff: float | None
+    directed_bearing_diff: float | None
+    overture_distance_m: float | None
+    osm_candidate_count: int
+    match_method: str
+    candidate_flags: tuple[str, ...]
+
+
+@dataclass
+class PhotosBundle:
+    photos: list[PhotoRecord]
+    links: list[PhotoLink]
+    rejected: list[RejectedRecord] = field(default_factory=list)
+    files_read: list[str] = field(default_factory=list)  # absolute paths of every input file read

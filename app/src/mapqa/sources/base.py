@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from mapqa.contract.bundle import Bbox, SignsBundle
+from mapqa.contract.bundle import Bbox, PhotosBundle, SignsBundle
 from mapqa.contract.models import SourceDescriptor
 
 
@@ -16,3 +16,5 @@ class SourceAdapter(Protocol):
     def check(self, bbox: Bbox) -> dict[str, dict[str, int]]: ...
 
     def load_signs(self, bbox: Bbox | None) -> SignsBundle: ...
+
+    def load_photos(self, bbox: Bbox | None) -> PhotosBundle: ...
