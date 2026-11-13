@@ -134,6 +134,37 @@ def test_circuit_breaker_gives_code_3_and_report(cfg: Path, capsys, monkeypatch)
     assert "Odczyt przerwany" in report and "503" in report  # review #9: both must be present
 
 
+def test_cache_only_never_builds_client_and_sends_nothing(cfg: Path, capsys, monkeypatch) -> None:
+    """Guard after the 2026-11-13 mistake: a 'check the cache' rerun sent 25 new paid requests."""
+    port = FakePort()
+    monkeypatch.setattr(pipeline, "build_port", lambda *a, **k: port)
+    _run(cfg, capsys, "--model", "--yes", "--max-images", "3")
+    calls = port.calls
+
+    def no_port(*a, **k):
+        raise AssertionError("--cache-only must not build a model client")
+
+    monkeypatch.setattr(pipeline, "build_port", no_port)
+    rc, doc = _run(cfg, capsys, "--model", "--cache-only")  # no --yes needed: nothing is paid
+    assert port.calls == calls
+    assert doc["result"]["confirmation"] == "cache_only"
+    assert doc["result"]["queries_used"] == 0
+    assert doc["result"]["funnel"]["cache_hits_l1"] == 3
+    assert rc == 3  # uncached images are reported as budget_exceeded (max_images = 0), never read
+
+
+def test_manifest_states_planned_requests_and_cost_and_is_shown_with_yes(cfg: Path, capsys, monkeypatch) -> None:
+    port = FakePort()
+    monkeypatch.setattr(pipeline, "build_port", lambda *a, **k: port)
+    rc = main(["run", "--config", str(cfg), "--output", "json", "--model", "--yes", "--max-images", "4"])
+    captured = capsys.readouterr()
+    m = json.loads(captured.out)["result"]["manifest"]
+    assert m["planned_new_images"] == 4
+    assert m["max_requests"] == 8  # each image: level 1 + possible level 2
+    assert m["max_cost_usd"] == "0.24"  # 4 × (0.02 + 0.04) reserve upper bound
+    assert "Płatny odczyt modelem" in captured.err  # shown on stderr also with --yes
+
+
 def test_level2_cache_miss_still_requires_confirmation(cfg: Path, capsys, monkeypatch) -> None:
     """Review #2: L1 fully cached but L2 not cached must not be treated as cache_only (D11)."""
     port = FakePort(probability=0.5)  # below threshold on both levels → both levels asked

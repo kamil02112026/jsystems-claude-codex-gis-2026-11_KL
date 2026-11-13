@@ -44,6 +44,11 @@ def _run_options(p: argparse.ArgumentParser, *, default_split: str) -> None:
     p.add_argument("--model", action="store_true", help="włącza płatny odczyt modelem (wymaga potwierdzenia)")
     p.add_argument("--no-model", action="store_true", help="wymusza tryb bez modelu")
     p.add_argument("--yes", action="store_true", help="potwierdza manifest kosztu bez pytania")
+    p.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="odczyt modelem wyłącznie z cache: 0 zapytań, bez klienta HTTP i bez potwierdzenia",
+    )
     p.add_argument("--max-queries", type=int)
     p.add_argument("--max-images", type=int)
     p.add_argument("--max-usd", type=str)
@@ -167,8 +172,8 @@ def validate_run_args(args: argparse.Namespace) -> tuple[Bbox | None, list[str]]
         raise ValidationError(f"Atrybut niedostępny w MVP: {', '.join(not_mvp)}", code="invalid_attribute", hint="MVP obsługuje speed_limit (PRD §9)")
     if args.dataset != "signs":
         raise ValidationError("Zestaw photos będzie dostępny od przyrostu P1", code="dataset_not_available", hint="Użyj --dataset signs")
-    if args.model and args.no_model:
-        raise ValidationError("Flagi --model i --no-model wykluczają się", code="invalid_flags")
+    if (args.model or args.cache_only) and args.no_model:
+        raise ValidationError("Flagi --model/--cache-only i --no-model wykluczają się", code="invalid_flags")
     for name in ("max_queries", "max_images"):
         value = getattr(args, name)
         if value is not None and value < 0:

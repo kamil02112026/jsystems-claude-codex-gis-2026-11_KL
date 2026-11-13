@@ -103,6 +103,8 @@ def _apply_overrides(loaded: LoadedConfig, args: argparse.Namespace) -> None:
         lim.max_queries = args.max_queries
     if args.max_images is not None:
         lim.max_images = args.max_images
+    if getattr(args, "cache_only", False):
+        lim.max_images = 0  # guard: no new image may be read, so no request can be sent
     if args.max_usd is not None:
         lim.max_usd = Decimal(args.max_usd)
     c.limits = RunLimits.model_validate(lim.model_dump())
@@ -148,9 +150,16 @@ class _ModelPhase:
 
 
 def _manifest(loaded: LoadedConfig, uncached_images: int) -> dict[str, Any]:
+    """What the run may spend, stated before any request (D11). Upper bounds use the reserves (ADR-003 §3.6)."""
     c = loaded.config
+    planned = min(uncached_images, c.limits.max_images)
+    reserve = c.limits.reserve_usd
+    max_cost = min(planned * (reserve["level1"] + reserve["level2"]), c.limits.max_usd)
     return {
         "images_without_cache": uncached_images,
+        "planned_new_images": planned,
+        "max_requests": min(planned * 2, c.limits.max_queries),
+        "max_cost_usd": str(max_cost),
         "questions_per_image": 1,
         "models": {"level1": c.models.level1, "level2": f"{c.models.level2} (reasoning {c.models.level2_effort})"},
         "max_queries": c.limits.max_queries,
@@ -161,6 +170,9 @@ def _manifest(loaded: LoadedConfig, uncached_images: int) -> dict[str, Any]:
 
 def _confirm(manifest: dict[str, Any], args: argparse.Namespace) -> Confirmation:
     if args.yes:
+        # never silent: the manifest is printed on stderr also when --yes skips the question
+        sys.stderr.write("Płatny odczyt modelem (potwierdzony flagą --yes):\n" + json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+        sys.stderr.flush()
         return "flag_yes"
     if not _stdin_is_tty():
         raise ConfirmationRequired(
@@ -194,12 +206,13 @@ def _model_phase(
         usable = [pid for pid in photo_ids if signs[pid].image_status == "ok"]
         uncached = [pid for pid in usable if _needs_request(cache, c, signs[pid].crop_sha256)]
         manifest = _manifest(loaded, len(uncached))
-        confirmation: Confirmation = _confirm(manifest, args) if uncached else "cache_only"
+        cache_only = getattr(args, "cache_only", False) or not uncached
+        confirmation: Confirmation = "cache_only" if cache_only else _confirm(manifest, args)
         if confirmation == "declined":
             skipped = {pid: CascadeResult(photo_sha256=signs[pid].crop_sha256, question_id=QUESTION.question_id, final_status="skipped_no_model") for pid in photo_ids}
             return _ModelPhase(skipped, "declined", manifest, None, ["model_reading_declined"], [], 0)
 
-        port = build_port(loaded) if uncached else _CacheOnlyPort()
+        port = _CacheOnlyPort() if cache_only else build_port(loaded)
         budget = Budget(c.limits)
         out_dir.mkdir(parents=True, exist_ok=True)
         cascade = Cascade(port, cache, budget, CostLog(out_dir / "costs.jsonl"), c, run_id)
@@ -283,7 +296,7 @@ def run_command(args: argparse.Namespace, *, bbox: Bbox | None, attributes: list
     loaded = load(source=args.source, config_path=args.config, env=os.environ, cwd=Path.cwd())
     _apply_overrides(loaded, args)
     c = loaded.config
-    model_reading = eval_mode is not None or ((args.model or c.model_reading) and not args.no_model)
+    model_reading = eval_mode is not None or ((args.model or args.cache_only or c.model_reading) and not args.no_model)
 
     adapter = build_adapter(loaded.source_name, loaded.source, Path.cwd())
     descriptor = adapter.describe()
