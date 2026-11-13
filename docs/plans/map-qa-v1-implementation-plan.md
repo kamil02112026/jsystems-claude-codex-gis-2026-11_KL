@@ -47,7 +47,7 @@ Proponowane wartości wymagają potwierdzenia. Pole bez potwierdzenia oznacza **
 | Etykiety | `street_lighting_visible`: 54 `yes`, 25 `no`, 21 `uncertain`; `surface`: 99 `paved`, 0 `unpaved`; `speed_limit_value` (pełne kadry): 14 `certain` | DuckDB na `reference_labels.csv` |
 | Nagrania | tylko `fixtures/captures/openrouter/`; **brak nagrań Databricks** (A1 §8 DB-01/DB-02) | `ls app/tests/fixtures/captures` |
 | Narzędzia | uv 0.13.7, Python 3.12.16, DuckDB 1.5.6 + spatial, Codex CLI 0.167.2, OpenCode 2.2.5, Claude Code `claude -p` | `--help` (2026-11-13) |
-| Id modeli | Haiku 5.5: alias `haiku`; OpenCode: `xiaomi-token-plan-ams/mimo-v2.6-flash` (zapas `opencode/mimo-v2.6-flash-free`); **Codex Sol 6.1 / Luna 6: niezweryfikowane** | `opencode models`; T31 |
+| Id modeli | Haiku 5.5: alias `haiku`; OpenCode: `xiaomi-token-plan-ams/mimo-v2.6-flash` (zapas `opencode/mimo-v2.6-flash-free`); Codex: Sol 6.1 = `gpt-6.1-sol`, Luna 6 = `gpt-6-luna` (lokalna lista modeli Codex, T31) | `opencode models`; T31 |
 
 ---
 
@@ -96,7 +96,7 @@ Każdy wiersz zaczyna się od testu, który ma paść z oczekiwanego powodu (Red
 |---|---|---|---|---|---|---|---|
 | T29 Poprawki z przeglądu PR #3 | 8 ustaleń z testami regresji: nieczytelny obraz nie przerywa płatnej pętli, klient zamykany w `finally`, `calibrate` tylko na `calibration` i z `--grid`, koszt BYOK w skrypcie nagrań, walidacja współrzędnych, duplikat `photo_id` → `ContractViolation`, sekcje ewaluacji zgodne z bbox/split, unikalny katalog uruchomienia, wspólna wartość OSM w profilu, jeden helper `sha256` i ścisły MIME | PRD F2.3, F5.7, §7; A4 §3.9, D-004-3; A3 §3.2 | — | Orkiestrator | — | `test_review_fixes.py` 14/14, pełny zestaw 348 + 5 E2E | done (`ed4a44e`) |
 | T30 Pozostałe ustalenia | (a) kolizje `item_id` wykrywane przy budowie kolejki; (b) `invalid_response` w cache: zostaje zgodnie z A3 §3.7 (U3), dokumentacja | PRD F6.7, kryt. 14; A4 §3.4; A3 §3.7, D-003-4 | T29 | Haiku 5.5 (`haiku`), 2 rundy | `app/src/mapqa/candidates/queue.py`, `app/tests/unit/test_queue.py` | Red: dwa zdjęcia z tym samym hashem wycinka → ostrzeżenie/rozróżnienie. Commit `Backend: guard queue id collisions` | todo |
-| T31 Weryfikacja narzędzi | Prawdziwe id modeli wpisane do §5 (Codex: config / `/model` w oknie właściciela, bez płatnego `exec`; `opencode models`; `claude --help`); projektowy `opencode.jsonc` blokujący push/force/`main`/sekrety albo decyzja „OpenCode bez `--auto`” | skill „Headless delegation”; AGENTS.md (Documentation lookup) | T29 | Orkiestrator | `docs/plans/map-qa-v1-implementation-plan.md` (§5), opcjonalnie `opencode.jsonc` | Gdy id Codex niepotwierdzone, jego wiersze przejmuje Haiku albo orkiestrator. Commit `Docs: record verified worker model ids` | todo |
+| T31 Weryfikacja narzędzi | Prawdziwe id modeli wpisane do §5 (Codex: config / `/model` w oknie właściciela, bez płatnego `exec`; `opencode models`; `claude --help`); projektowy `opencode.jsonc` blokujący push/force/`main`/sekrety albo decyzja „OpenCode bez `--auto`” | skill „Headless delegation”; AGENTS.md (Documentation lookup) | T29 | Orkiestrator | `docs/plans/map-qa-v1-implementation-plan.md` (§5), opcjonalnie `opencode.jsonc` | Gdy id Codex niepotwierdzone, jego wiersze przejmuje Haiku albo orkiestrator. Commit `Docs: record verified worker model ids` | done (`gpt-6.1-sol`, `gpt-6-luna`, `xiaomi-token-plan-ams/mimo-v2.6-flash`; OpenCode bez `--auto`) |
 | T32 `--dataset photos` w adapterze `files` | `photos.csv`, `photo_road_links.csv`, `osm_roads`, `overture_segments`; `photos_dir` = `offline/` + `data/photos/`; `missing_file`/`hash_mismatch`; `heading` NULL ≠ 0; całe drogi przecinające bbox | PRD F2.1–F2.4, F8.3–F8.6, kryt. 1, 2, 4; A1 §3.3, §4; FIL-01..06, CON-01, SCH-01 | T29 | Haiku 5.5; SQL i bbox przegląda orkiestrator | `app/src/mapqa/sources/files.py`, `app/src/mapqa/sql/files_photos_*.sql`, `app/tests/unit/test_files_adapter.py`, `app/tests/contract/test_source_contract.py` | Red: FIL-02 (15 NULL, 23 × 0.0), FIL-03..05 na kopii, CON-01. Commit `Backend: load photos dataset in files adapter` | todo |
 | T33 CRS i azymut | Funkcje metryczne odrzucają kolumny bez `_2180`; `ST_Transform(..., always_xy := true)`; azymut zgodny z `pyproj.Geod` do 0,1° | PRD F3.1, kryt. 3; A2 §3.1; CRS-01, CRS-02, TAC-002-01, TAC-002-06; A0 TAC-15 | T29 | Codex Luna 6 (id: T31) albo Haiku | `app/src/mapqa/matching/crs.py`, `app/tests/integration/test_crs.py` | Red: CRS-01 (100,00 ± 0,01 m), strażnik zamiany osi. Commit `Backend: add EPSG:2180 distance and bearing helpers` | todo |
 | T34 Własne dopasowanie zdjęcie → droga | Kandydaci ≤ 25 m, ranking, remisy, Overture przez `record_id`, flagi A2 §3.3 (w tym `grade_separated`, `service_or_restricted`), wynik deterministyczny | PRD F3.1–F3.4, kryt. 4, 5; A2 §3.2–§3.3, D-002-1, D-002-3; MAT-01..06, MAT-09, HDG-01, HDG-02, TAC-002-04, TAC-002-05 | T32, T33 | **Codex Sol 6.1** (id: T31), 2 rundy | `app/src/mapqa/matching/spatial.py`, `app/src/mapqa/sql/match_*.sql`, `app/tests/unit/test_spatial_matcher.py` | Red: syntetyczne geometrie, GeoPandas jako wyrocznia (dev). Commit `Backend: add EPSG:2180 photo-to-road matcher` | todo |
@@ -140,8 +140,8 @@ Każdy wiersz zaczyna się od testu, który ma paść z oczekiwanego powodu (Red
 |---|---|---|
 | Orkiestrator | Claude Code, silny model (sesja `/goal`) | kontrakty, `pipeline.py`, `cli/main.py`, `uv.lock`, briefy, płatne bramki, integracja, akceptacja; **jedyny** autor commitów |
 | Wykonawca domyślny | subagent Claude Code **Haiku 5.5** (`model: haiku`) | T30, T32, T35, T36, T38 (skrypt), T44, T45, T50, T52, T57 |
-| Złożone zadania i przegląd | Codex **Sol 6.1** (id: T31) | T34, T39, T48, T54, przegląd T58 |
-| Proste zadania i badania | Codex **Luna 6** (id: T31) | T33, T40, T49, T59 |
+| Złożone zadania i przegląd | Codex **Sol 6.1** `gpt-6.1-sol` | T34, T39, T48, T54, przegląd T58 |
+| Proste zadania i badania | Codex **Luna 6** `gpt-6-luna` | T33, T40, T49, T59 |
 | Bardzo proste zadania | OpenCode **MiMo-V2.6-Flash** `xiaomi-token-plan-ams/mimo-v2.6-flash` (zapas `opencode/mimo-v2.6-flash-free`) | T43, T56 |
 
 - **Rundy i eskalacja:** jeden brief i najwyżej 2 rundy poprawek. Eskalacja, gdy test nadal pada, potrzebny jest plik spoza listy albo zmiana kontraktu, lub wykonawca znajdzie sprzeczność w specyfikacji. Kolejność: Haiku/MiMo/Luna → Sol → orkiestrator.
@@ -194,8 +194,8 @@ Uruchamiamy z katalogu głównego repozytorium w PowerShell. Codex: `codex` albo
 
 | Wykonawca | Polecenie (PowerShell) | Uwagi |
 |---|---|---|
-| Codex (implementacja) | `Get-Content .agent-briefs\T34.md -Raw \| codex exec -C . -m <sol-6.1-id> -s workspace-write --json -o .agent-briefs\T34.result.md -` | prompt ze stdin (`-`); `workspace-write` ogranicza zapis do repozytorium; `--ephemeral` pomija pliki sesji |
-| Codex (przegląd) | `codex exec review` albo `codex exec -m <sol-6.1-id> -s read-only "Review the diff origin/main...HEAD against docs/PRD.md and docs/ADR/ ..."` | tylko odczyt |
+| Codex (implementacja) | `Get-Content .agent-briefs\T34.md -Raw \| codex exec -C . -m gpt-6.1-sol -s workspace-write --json -o .agent-briefs\T34.result.md -` | prompt ze stdin (`-`); `workspace-write` ogranicza zapis do repozytorium; `--ephemeral` pomija pliki sesji |
+| Codex (przegląd) | `codex exec review` albo `codex exec -m gpt-6.1-sol -s read-only "Review the diff origin/main...HEAD against docs/PRD.md and docs/ADR/ ..."` | tylko odczyt |
 | OpenCode | `opencode run -m xiaomi-token-plan-ams/mimo-v2.6-flash --title T43 --format json -f .agent-briefs\T43.md "Execute the attached brief."` | `--auto` tylko z projektowym `opencode.jsonc` z regułami `deny` (T31) |
 | Claude Code | `claude -p (Get-Content .agent-briefs\T32.md -Raw) --model haiku --output-format json --permission-mode acceptEdits --allowedTools "Read,Edit,Write,Bash(uv run *)"` | zalecane: narzędzie Agent z sesji orkiestratora |
 
